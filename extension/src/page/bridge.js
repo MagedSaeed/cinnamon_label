@@ -7,7 +7,12 @@
 //     downloading the whole video a second time. If Cinnamon Label does not claim the request
 //     quickly, or anything goes wrong, the request goes to the network exactly as before.
 //
-// It never submits, updates, skips or deletes anything, and never calls Label Studio's API.
+//  3. Reads and edits the open annotation's speaker segments and their per-segment fields, through
+//     Label Studio's own model actions (the same ones its UI uses), so Submit, History, review and
+//     validation see exactly what a hand-made edit would produce.
+//
+// It never submits, updates, skips or deletes an annotation, never saves a draft itself, and never
+// calls Label Studio's API.
 (() => {
   if (window.__CL_BRIDGE__) return;
   window.__CL_BRIDGE__ = true;
@@ -115,6 +120,173 @@
     };
   }
 
+  // ---------- 3. segments: read and edit Label Studio's own annotation ----------
+  // Only regions of the speaker-segment Labels tag and their per-segment fields are touched.
+  // Writes go through Label Studio's own model actions, grouped into one undo step each.
+  // Nothing here saves, submits, updates or skips: Label Studio decides when to save drafts.
+  const ann = () => window.Htx && window.Htx.annotationStore && window.Htx.annotationStore.selected;
+  const cleanId = (r) => r.cleanId || String(r.id).split("#")[0];
+
+  // The Labels tag that marks segments on an Audio tag, from the live config.
+  function segmentTags(a) {
+    for (const [name, tag] of a.names) {
+      if (!/labels$/i.test(tag.type || "") || !tag.toname) continue;
+      const obj = a.names.get(tag.toname);
+      if (obj && /audio/i.test(obj.type || "")) return { labels: tag, object: obj };
+    }
+    return null;
+  }
+  function segmentRegions(a, tags) {
+    return a.regions.filter((r) => r.results && r.results.some((x) => x.from_name === tags.labels));
+  }
+  const findRegion = (a, tags, id) => segmentRegions(a, tags).find((r) => cleanId(r) === id) || null;
+
+  function readSegments() {
+    const a = ann();
+    if (!a) return { ready: false };
+    const tags = segmentTags(a);
+    if (!tags) return { ready: true, supported: false };
+    const segments = segmentRegions(a, tags)
+      .map((r) => {
+        const fields = {};
+        for (const x of r.results) {
+          if (x.from_name === tags.labels) continue;
+          const tag = x.from_name;
+          const v = x.value && x.value[tag.valueType];
+          fields[tag.name] = v && v.toJSON ? v.toJSON() : v;
+        }
+        return { id: cleanId(r), start: r.start, end: r.end, fields, origin: r.origin || null, readonly: !!r.readonly };
+      })
+      .sort((p, q) => p.start - q.start);
+    const sel = a.regions.find((r) => r.selected);
+    return {
+      ready: true,
+      supported: true,
+      readOnly: !!(a.readonly || (typeof a.isReadOnly === "function" && a.isReadOnly())),
+      labelsName: tags.labels.name,
+      label: (tags.labels.children || []).map((c) => c.value).filter(Boolean)[0] || null,
+      // Per-segment text fields (e.g. the transcript), for joining texts on merge.
+      textFields: [...a.names.values()].filter((t) => t.perregion && /textarea/i.test(t.type || "")).map((t) => t.name),
+      objectName: tags.object.name,
+      selected: sel ? cleanId(sel) : null,
+      segments,
+    };
+  }
+
+  function guardWritable(a) {
+    if (!a) throw new Error("No annotation is open.");
+    if (a.readonly || (typeof a.isReadOnly === "function" && a.isReadOnly())) throw new Error("This annotation is read-only.");
+    const tags = segmentTags(a);
+    if (!tags) throw new Error("This labeling config has no segment labels on an audio track.");
+    return tags;
+  }
+
+  // Set a per-segment field. value: array (choices) or string (text); empty removes the answer.
+  function setFieldOn(a, region, name, value) {
+    const tag = a.names.get(name);
+    if (!tag || !tag.perregion) throw new Error(`"${name}" is not a per-segment field.`);
+    const arr = Array.isArray(value) ? value.filter((v) => v != null && v !== "") : value == null || value === "" ? [] : [String(value)];
+    const res = region.results.find((x) => x.from_name === tag);
+    if (!arr.length) {
+      if (res) region.removeResult(res);
+    } else if (res) res.setValue(arr);
+    else region.addResult({ from_name: tag.id, to_name: region.object.id, type: tag.resultType, value: { [tag.valueType]: arr } });
+  }
+
+  // plan: { create: [{start,end, copyFrom?}], update: [{id,start,end}], remove: [id], fields?: [{id|createIndex, name, value}] }
+  function applyPlan(plan) {
+    const a = ann();
+    const tags = guardWritable(a);
+    const h = a.history;
+    const key = "cinnamon-label";
+    const created = [];
+    if (h && h.freeze) h.freeze(key);
+    try {
+      for (const id of plan.remove || []) {
+        const r = findRegion(a, tags, id);
+        if (r) r.deleteRegion();
+      }
+      for (const u of plan.update || []) {
+        const r = findRegion(a, tags, u.id);
+        if (!r) throw new Error(`Segment ${u.id} no longer exists.`);
+        // Order matters only for validity in between; set the side that moves outward first.
+        if (u.start < r.start) {
+          r.setProperty("start", u.start);
+          r.setProperty("end", u.end);
+        } else {
+          r.setProperty("end", u.end);
+          r.setProperty("start", u.start);
+        }
+      }
+      for (const c of plan.create || []) {
+        const before = new Set(a.regions.map((r) => r.id));
+        const label = (tags.labels.children || []).map((x) => x.value).filter(Boolean)[0];
+        a.appendResults([
+          {
+            id: "cl" + Math.random().toString(36).slice(2, 10),
+            from_name: tags.labels.name,
+            to_name: tags.object.name,
+            type: tags.labels.resultType || "labels",
+            origin: c.origin || "manual",
+            value: { start: c.start, end: c.end, channel: 0, [tags.labels.valueType || "labels"]: [label] },
+          },
+        ]);
+        const r = a.regions.find((x) => !before.has(x.id));
+        if (!r) throw new Error("Label Studio did not create the segment.");
+        created.push(cleanId(r));
+        if (c.copyFrom) {
+          // Copy the choice answers (not texts) of the segment this one was split from.
+          const src = findRegion(a, tags, c.copyFrom);
+          for (const x of src ? src.results : []) {
+            if (x.from_name === tags.labels || x.type !== "choices") continue;
+            setFieldOn(a, r, x.from_name.name, [...x.value.choices]);
+          }
+        }
+      }
+      for (const f of plan.fields || []) {
+        const id = f.id != null ? f.id : created[f.createIndex];
+        const r = findRegion(a, tags, id);
+        if (r) setFieldOn(a, r, f.name, f.value);
+      }
+    } finally {
+      if (h && h.unfreeze) h.unfreeze(key);
+    }
+    return { created, state: readSegments() };
+  }
+
+  function setField({ id, name, value }) {
+    const a = ann();
+    const tags = guardWritable(a);
+    const r = findRegion(a, tags, id);
+    if (!r) throw new Error(`Segment ${id} no longer exists.`);
+    setFieldOn(a, r, name, value);
+    return { state: readSegments() };
+  }
+
+  function selectSegment({ id }) {
+    const a = ann();
+    if (!a) return false;
+    const tags = segmentTags(a);
+    const r = id && tags ? findRegion(a, tags, id) : null;
+    if (r && !r.selected) a.selectArea(r);
+    else if (!r && a.unselectAll) a.unselectAll();
+    return true;
+  }
+
+  // Tell the content script when the annotation changes from elsewhere (undo, native UI, ...).
+  let lastSig = "";
+  setInterval(() => {
+    try {
+      const a = ann();
+      if (!a) return;
+      const sig = a.id + "|" + JSON.stringify(a.serializeAnnotation());
+      if (sig !== lastSig) {
+        lastSig = sig;
+        post({ op: "annotationChanged" });
+      }
+    } catch (_) {}
+  }, 300);
+
   function reply(id, ok, data) {
     post({ id, ok, data });
   }
@@ -127,6 +299,24 @@
       switch (m.op) {
         case "state":
           return reply(m.id, true, state());
+        case "segments":
+          return reply(m.id, true, readSegments());
+        case "applyPlan":
+          return reply(m.id, true, applyPlan(m.args.plan));
+        case "setField":
+          return reply(m.id, true, setField(m.args));
+        case "select":
+          return reply(m.id, true, selectSegment(m.args));
+        case "undo":
+        case "redo": {
+          const a = ann();
+          if (a && typeof a[m.op] === "function") a[m.op](); // Label Studio's own history
+          return reply(m.id, true, { canUndo: !!(a && a.history && a.history.canUndo), canRedo: !!(a && a.history && a.history.canRedo) });
+        }
+        case "history": {
+          const a = ann();
+          return reply(m.id, true, { canUndo: !!(a && a.history && a.history.canUndo), canRedo: !!(a && a.history && a.history.canRedo) });
+        }
         case "waveformClaim": {
           const h = held.get(m.args.id);
           if (h) h.claimed = true;

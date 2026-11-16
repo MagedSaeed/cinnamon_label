@@ -40,12 +40,15 @@
       "js": [
         "src/shared/util.js",
         "src/shared/mp4.js",
+        "src/shared/segments.js",
         "src/content/core.js",
         "src/content/cache.js",
         "src/content/downloader.js",
         "src/content/audio.js",
         "src/content/player.js",
         "src/content/timeline.js",
+        "src/content/segstore.js",
+        "src/content/panel.js",
         "src/content/overlay.js",
         "src/content/main.js"
       ],

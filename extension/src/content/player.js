@@ -74,6 +74,43 @@
       this.seekTo((this.v.currentTime || 0) + d);
     }
 
+    // Play [a, b) and stop at b. Any manual pause or seek outside the range cancels the stop.
+    playRange(a, b) {
+      const v = this.v;
+      if (!v.currentSrc || !(b > a)) return;
+      this._range = [a, b];
+      this.seekTo(a);
+      v.preload = "auto";
+      v.play().catch(() => {});
+      if (!this._rangeHooked) {
+        this._rangeHooked = true;
+        v.addEventListener("pause", () => (this._range = null));
+        v.addEventListener("seeking", () => {
+          const r = this._range;
+          if (r && (v.currentTime < r[0] - 0.05 || v.currentTime > r[1] + 0.05)) this._range = null;
+        });
+      }
+      const startedAt = performance.now();
+      const watch = () => {
+        const r = this._range;
+        if (!r) return;
+        if (v.paused) {
+          // play() may not have started yet; give up if it never does.
+          if (performance.now() - startedAt > 3000) this._range = null;
+          else requestAnimationFrame(watch);
+          return;
+        }
+        if (v.currentTime >= r[1]) {
+          this._range = null;
+          v.pause();
+          v.currentTime = r[1];
+          return;
+        }
+        requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+    }
+
     setRate(r) {
       this.v.defaultPlaybackRate = this.v.playbackRate = r;
     }

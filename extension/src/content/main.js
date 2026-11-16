@@ -11,6 +11,7 @@
   let settings = null;
   let ui = null;
   let player = null;
+  let panel = null;
   let task = null; // current Task
   let failedTaskId = null; // task where we hit an error; stays native until the user retries
   let stopped = false;
@@ -34,6 +35,10 @@
     }
   }
   CL.onPage((m) => {
+    if (m.op === "annotationChanged") {
+      if (task && task.store) task.store.refresh().catch(() => {});
+      return;
+    }
     if (m.op !== "waveformWanted") return;
     const key = U.mediaKey(m.url, location.href);
     // Serve it in either UI mode (switching to native triggers this request too), unless we
@@ -67,11 +72,31 @@
       this.dl = null;
       this.dead = false;
       this.failed = false;
+      this.annotationKey = st.annotationKey;
+      this.store = null;
+    }
+
+    // The segments of the open annotation (rebuilt when the user switches annotation tabs).
+    makeStore() {
+      if (this.store) this.store.destroy();
+      this.store = new CL.SegmentStore({
+        onChange: (s) => {
+          if (this.dead) return;
+          ui.timeline.invalidate();
+          panel.render();
+          ui.setSync(s);
+        },
+      });
+      ui.timeline.setStore(this.store);
+      panel.setStore(this.store);
+      ui.setSync(this.store);
+      this.store.refresh().catch(CL.warn);
     }
 
     async start() {
       this.failed = false;
       ui.setTask(this.taskId);
+      if (!this.store) this.makeStore();
       ui.setNet({ kind: "checking" });
       this.resetAudio();
       let cached = null;
@@ -200,6 +225,14 @@
 
     destroy() {
       this.dead = true;
+      if (this.store) {
+        // Finish writing what was typed, if Label Studio still has this annotation; then drop it.
+        const st = this.store;
+        st.flush().finally(() => st.destroy());
+        ui.timeline.setStore(null);
+        panel.setStore(null);
+        ui.setSync(null);
+      }
       if (this.dl) this.dl.abort();
       if (this.audio) this.audio.close();
       player.reset();
@@ -300,6 +333,9 @@
         CL.guard(() => task.start())();
       }
       releaseForeign();
+    } else if (task && st.annotationKey !== task.annotationKey) {
+      task.annotationKey = st.annotationKey;
+      task.makeStore(); // another annotation tab: its own segments
     }
     render(st);
   }
@@ -308,6 +344,7 @@
     CL.setMode(mode);
     if (mode === "native") {
       player && player.v.pause();
+      if (task && task.store) task.store.flush();
     } else {
       failedTaskId = null;
     }
@@ -330,19 +367,26 @@
     ui = null;
   }
 
-  // ---------- keyboard: only the universal ones, and only when not typing ----------
-  const isTyping = (e) => {
-    const t = (e.composedPath && e.composedPath()[0]) || e.target;
-    if (!t || !t.tagName) return false;
-    if (t.isContentEditable) return true;
-    if (t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
-    if (t.tagName === "INPUT") return !["range", "button", "checkbox", "radio", "submit", "reset"].includes((t.type || "").toLowerCase());
-    return false;
-  };
+  // ---------- keyboard ----------
+  // 1. Keys typed in our own fields never reach Label Studio (its hotkeys can't tell they come from
+  //    a text field inside our overlay: Backspace could delete a segment, Ctrl+Enter could submit).
+  // 2. Only universal shortcuts of our own: Space (play/pause), left/right (seek 5 s), when not typing.
+  // 3. Label Studio's own Submit hotkey is held back while an edit is still being written.
+  const inOverlay = (e) => !!(ui && e.composedPath && e.composedPath().includes(ui.host));
+  const target = (e) => (e.composedPath && e.composedPath()[0]) || e.target;
   let swallowSpaceUp = false;
   function onKeyDown(e) {
-    if (stopped || !ui || !ui.visible || !task) return;
-    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || isTyping(e)) return;
+    if (stopped || !ui) return;
+    const t = target(e);
+    if (inOverlay(e) && CL.isTypingTarget(t)) {
+      const h = CL.fieldKeys.get(t);
+      if (h) h(e);
+      e.stopImmediatePropagation();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && holdSubmitIfDirty(e)) return;
+    if (!ui.visible || !task) return;
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || CL.isTypingTarget(t)) return;
     if (e.code === "Space") {
       if (!e.repeat) player.toggle();
       swallowSpaceUp = true;
@@ -353,11 +397,41 @@
     e.stopImmediatePropagation(); // keep Label Studio's own hotkeys from also reacting
   }
   function onKeyUp(e) {
+    if (inOverlay(e) && CL.isTypingTarget(target(e))) return e.stopImmediatePropagation();
     if (e.code === "Space" && swallowSpaceUp) {
       swallowSpaceUp = false;
       e.preventDefault(); // a focused button would otherwise "click" on Space release
       e.stopImmediatePropagation();
     }
+  }
+  function onKeyPress(e) {
+    if (inOverlay(e) && CL.isTypingTarget(target(e))) e.stopImmediatePropagation();
+  }
+
+  // ---------- Submit: make sure every edit is in Label Studio first ----------
+  // We never press Submit. When the user does, pending edits start writing on pointer-down; if
+  // anything is still unwritten at the click, that click is stopped and the user is asked to press
+  // Submit again (we don't re-click for them).
+  const isSubmitButton = (el) => {
+    const b = el && el.closest ? el.closest("button") : null;
+    if (!b) return false;
+    const text = (b.innerText || b.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+    return /^(submit|update|complete)\b/.test(text);
+  };
+  const storeDirty = () => !!(task && task.store && task.store.dirty);
+  function holdSubmitIfDirty(e) {
+    if (!storeDirty()) return false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    task.store.flush().then(() => ui && ui.toast("Your last edit is now in Label Studio. Press Submit again to submit."));
+    ui.toast("Writing your last edit into Label Studio…");
+    return true;
+  }
+  function onPointerDown(e) {
+    if (storeDirty() && isSubmitButton(target(e))) task.store.flush();
+  }
+  function onClick(e) {
+    if (isSubmitButton(target(e))) holdSubmitIfDirty(e);
   }
 
   // ---------- start ----------
@@ -376,6 +450,11 @@
     ui = CL.createOverlay();
     player = new CL.Player(ui.video);
     ui.bindPlayer(player);
+    panel = CL.createPanel(ui.side, {
+      player,
+      timeline: ui.timeline,
+      textFields: () => (task && task.store ? task.store.textFields : []),
+    });
     ui.onNative(() => setMode("native"));
     ui.onBack(() => setMode("cinnamon"));
 
@@ -396,6 +475,10 @@
 
     window.addEventListener("keydown", CL.guard(onKeyDown), true);
     window.addEventListener("keyup", CL.guard(onKeyUp), true);
+    window.addEventListener("keypress", CL.guard(onKeyPress), true);
+    window.addEventListener("pointerdown", CL.guard(onPointerDown), true);
+    window.addEventListener("click", CL.guard(onClick), true);
+    document.addEventListener("visibilitychange", () => task && task.store && task.store.flushTexts());
 
     chrome.storage.onChanged.addListener(
       CL.guard(async (changes, area) => {
@@ -417,7 +500,7 @@
       setInterval(() => {
         if (!CL.alive()) return;
         try {
-          chrome.runtime.sendMessage({ type: "CL_DEV_TICK", dirty: false }, (r) => {
+          chrome.runtime.sendMessage({ type: "CL_DEV_TICK", dirty: storeDirty() }, (r) => {
             if (chrome.runtime.lastError) return;
             const host = document.getElementById("cinnamon-label-root");
             if (host) host.dataset.dev = JSON.stringify(r || null); // visible in DevTools; nothing reads it

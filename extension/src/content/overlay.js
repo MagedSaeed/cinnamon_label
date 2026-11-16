@@ -42,7 +42,17 @@ video{display:block; width:auto; height:auto; max-width:100%; max-height:100%; b
 video:not([data-ready]){visibility:hidden}
 .stage .msg{position:absolute; inset:auto 0 16px; text-align:center; color:var(--muted); font-size:13px; pointer-events:none}
 .side{border-left:1px solid var(--line); background:var(--surface); padding:18px; overflow:auto}
-.side .empty{color:var(--faint); max-width:36ch}
+.side{display:flex; flex-direction:column}
+.sync{display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:var(--muted); font-size:13px}
+.sync i{width:8px; height:8px; border-radius:50%; background:#c4cad3}
+.sync[data-state="synced"] i{background:var(--ok)}
+.sync[data-state="pending"] i{background:var(--warn)}
+.sync[data-state="error"]{color:var(--err)}
+.sync[data-state="error"] i{background:var(--err)}
+.sync:empty{display:none}
+.toast{position:absolute; left:50%; top:54px; transform:translateX(-50%); z-index:2; max-width:70%; padding:7px 12px; border-radius:6px;
+  background:var(--ink); color:#fff; font-size:13px; opacity:0; transition:opacity .15s; pointer-events:none}
+.toast.show{opacity:1}
 
 .transport{display:flex; align-items:center; gap:14px; padding:10px 14px; border-top:1px solid var(--line)}
 .play{width:36px; height:36px; border-radius:50%; border:none; background:var(--cinnamon); color:#fff; display:grid; place-items:center; flex:none}
@@ -90,19 +100,20 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
     host.id = "cinnamon-label-root";
     host.style.cssText = "position:fixed;z-index:30;display:none;left:0;top:0;width:0;height:0";
     const root = host.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>${CSS}</style>`;
+    root.innerHTML = `<style>${CSS}${CL.PANEL_CSS || ""}</style>`;
     const app = el(`
       <div class="app">
         <header class="bar">
           <div class="brand"><img alt="" width="20" height="20" src="${chrome.runtime.getURL("icons/icon32.png")}">Cinnamon Label</div>
           <div class="task" id="task"></div>
           <div class="spacer"></div>
+          <span class="sync" id="sync" aria-live="polite"></span>
           <div class="net" id="net"><span class="txt" id="netTxt"></span><span class="meter"><b id="netBar"></b></span></div>
           <button class="ghost" id="native" title="Show Label Studio's own editor. Your work is kept.">Switch to native UI</button>
         </header>
         <div class="body">
           <section class="stage"><video id="video" playsinline></video><div class="msg" id="stageMsg"></div></section>
-          <aside class="side"><p class="empty">Segments and the transcript editor will appear here.</p></aside>
+          <aside class="side" id="side"></aside>
         </div>
         <footer class="transport">
           <button class="play" id="play" aria-label="Play" disabled>${ICON_PLAY}</button>
@@ -118,6 +129,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
             </select>
           </label>
         </footer>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <section class="lanes">
           <canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas>
           <canvas class="dt" id="dt" aria-label="Detail. Click to jump."></canvas>
@@ -151,7 +163,33 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
     const placeTimer = setInterval(place, 500); // Label Studio panels can resize without a window resize
 
     const api = {
+      host,
       video: $("video"),
+      side: $("side"),
+      // store: SegmentStore or null
+      setSync(store) {
+        const elx = $("sync");
+        if (!store || !store.supported) {
+          elx.textContent = "";
+          return;
+        }
+        const st = store.readOnly ? "readonly" : store.status;
+        elx.dataset.state = st;
+        const text =
+          st === "readonly"
+            ? "Read-only"
+            : st === "pending"
+              ? "Writing to Label Studio…"
+              : st === "error"
+                ? "Last edit not in Label Studio"
+                : "All edits in Label Studio";
+        elx.innerHTML = "<i></i>";
+        elx.append(text);
+        elx.title =
+          st === "error"
+            ? `The last edit did not reach Label Studio (${store.error}). The view now shows what Label Studio has; redo the edit if it's missing.`
+            : "Your segments and answers are kept in Label Studio's annotation. Nothing is submitted until you press Submit.";
+      },
       get visible() {
         return visible;
       },
@@ -181,6 +219,13 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
       },
       setTask(id) {
         $("task").textContent = id != null ? `Task ${id}` : "";
+      },
+      toast(text) {
+        const t = $("toast");
+        t.textContent = text;
+        t.classList.add("show");
+        clearTimeout(api._toastTimer);
+        api._toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
       },
       setStageMessage(t) {
         $("stageMsg").textContent = t || "";
@@ -292,7 +337,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
           box.value = String(Math.round(timeline.span * 10) / 10);
           box.select();
         });
-        CL.on(box, "keydown", (e) => {
+        CL.onFieldKey(box, (e) => {
           if (e.key === "Enter") {
             e.preventDefault();
             commit();
@@ -302,7 +347,6 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
             box.value = spanLabel(timeline.span);
             box.blur();
           }
-          e.stopPropagation(); // typing here never reaches Label Studio's hotkeys
         });
         CL.on(box, "blur", () => (box.value = spanLabel(timeline.span)));
         CL.on(box, "change", commit);

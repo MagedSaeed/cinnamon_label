@@ -124,5 +124,19 @@
     chrome.runtime.sendMessage({ type: "CL_SLOT_RESET" }, () => void chrome.runtime.lastError);
   } catch (_) {}
 
+  // ---------- keys typed in our own fields ----------
+  // Key events from our text fields are stopped at the window (before Label Studio's hotkeys can see
+  // them: otherwise Backspace could delete the selected segment and Ctrl+Enter could submit).
+  // Stopping them there also skips listeners on the field itself, so fields register here instead.
+  CL.fieldKeys = new WeakMap(); // element -> keydown handler
+  CL.onFieldKey = (el, fn) => CL.fieldKeys.set(el, CL.guard(fn));
+  CL.isTypingTarget = (t) => {
+    if (!t || !t.tagName) return false;
+    if (t.isContentEditable) return true;
+    if (t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
+    if (t.tagName === "INPUT") return !["range", "button", "checkbox", "radio", "submit", "reset"].includes((t.type || "").toLowerCase());
+    return false;
+  };
+
   CL.U = U;
 })();

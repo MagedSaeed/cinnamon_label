@@ -21,6 +21,12 @@
     tick: "#d9dde3",
     hover: "rgba(29,33,41,0.35)",
     text: "#5d6573",
+    segFill: "rgba(61,68,82,0.07)",
+    segSelFill: "rgba(138,75,42,0.13)",
+    segNewFill: "rgba(138,75,42,0.18)",
+    segEdge: "#7d8594",
+    segTag: "#7d8594",
+    segOv: "#9aa1ad",
   };
   const STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
   const MIN_SPAN = 1;
@@ -105,22 +111,22 @@
       CL.on(this.ov, "pointerup", ovEnd);
       CL.on(this.ov, "pointercancel", ovEnd);
 
-      // Detail: click to seek (dragging is reserved for segment editing).
-      let down = null;
-      CL.on(this.dt, "pointerdown", (e) => {
-        if (e.button === 0) down = { x: e.clientX, y: e.clientY };
-      });
-      CL.on(this.dt, "pointerup", (e) => {
-        if (down && Math.abs(e.clientX - down.x) < 4 && Math.abs(e.clientY - down.y) < 4) this.player.seekTo(this._xToTime(e));
-        down = null;
-        this.invalidate();
-      });
-      CL.on(this.dt, "pointermove", (e) => {
-        this.hoverX = e.clientX - this.dt.getBoundingClientRect().left;
+      // Detail lane: segments.
+      //  drag on empty waveform -> new segment; drag an edge -> resize; click a segment -> select + seek;
+      //  click empty -> seek. Edges snap to the playhead and other edges (Shift: no snapping);
+      //  Alt while resizing leaves a touching neighbour where it is.
+      CL.on(this.dt, "pointerdown", (e) => this._down(e));
+      CL.on(this.dt, "pointermove", (e) => this._move(e));
+      CL.on(this.dt, "pointerup", (e) => this._up(e));
+      CL.on(this.dt, "pointercancel", () => {
+        this.drag = null;
+        this.preview = null;
         this.invalidate();
       });
       CL.on(this.dt, "pointerleave", () => {
+        if (this.drag) return;
         this.hoverX = null;
+        this.hoverEdge = null;
         this.invalidate();
       });
       this.dt.addEventListener(
@@ -136,6 +142,127 @@
         }),
         { passive: false }
       );
+    }
+
+    // ---------- segments ----------
+    setStore(store) {
+      this.store = store;
+      this.drag = null;
+      this.preview = null;
+      this.invalidate();
+    }
+    get segs() {
+      return this.preview || (this.store ? this.store.segments : []);
+    }
+    get editable() {
+      return !!(this.store && this.store.supported && !this.store.readOnly);
+    }
+    _localX(e) {
+      return e.clientX - this.dt.getBoundingClientRect().left;
+    }
+    // Nearest segment edge within 7 px: { id, edge } (the selected segment wins ties).
+    _edgeAt(x) {
+      const w = this.dt.clientWidth;
+      const toX = (t) => ((t - this.viewStart) / this.span) * w;
+      let best = null;
+      for (const g of this.segs) {
+        for (const edge of ["start", "end"]) {
+          const d = Math.abs(toX(g[edge]) - x);
+          const pref = this.store && g.id === this.store.selected ? -0.5 : 0;
+          if (d <= 7 && (!best || d + pref < best.d)) best = { id: g.id, edge, d: d + pref };
+        }
+      }
+      return best;
+    }
+    // Snap t to the playhead or another segment's edge within 6 px (not while Shift is held).
+    _snap(t, e, exclude) {
+      if (e.shiftKey) return t;
+      const pxPerSec = this.dt.clientWidth / this.span;
+      let best = t;
+      let bestD = 6 / pxPerSec;
+      const cands = [this.v.currentTime || 0];
+      for (const g of this.segs) if (g.id !== exclude) cands.push(g.start, g.end);
+      for (const c of cands) {
+        const d = Math.abs(c - t);
+        if (d < bestD) {
+          best = c;
+          bestD = d;
+        }
+      }
+      return best;
+    }
+    _down(e) {
+      if (e.button !== 0 || !this.duration) return;
+      this.dt.setPointerCapture(e.pointerId);
+      const x = this._localX(e);
+      const t = this._xToTime(e);
+      const base = this.store ? this.store.segments.map((g) => ({ id: g.id, start: g.start, end: g.end })) : [];
+      const edge = this.editable ? this._edgeAt(x) : null;
+      if (edge) this.drag = { kind: "edge", id: edge.id, edge: edge.edge, base, x0: x };
+      else {
+        const inside = globalThis.CLSeg.segmentAt(base, t);
+        this.drag = inside ? { kind: "select", id: inside.id, x0: x } : { kind: "create", t0: this._snap(t, e), base, x0: x };
+      }
+    }
+    _move(e) {
+      const x = this._localX(e);
+      this.hoverX = x;
+      const S = globalThis.CLSeg;
+      const d = this.drag;
+      if (!d) {
+        this.hoverEdge = this.editable ? this._edgeAt(x) : null;
+        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : this.editable && !S.segmentAt(this.segs, this._xToTime(e)) ? "crosshair" : "pointer";
+        return this.invalidate();
+      }
+      d.moved = d.moved || Math.abs(x - d.x0) > 3;
+      if (!d.moved) return;
+      this.follow = false; // dragging: keep the view still
+      if (d.kind === "edge") {
+        const t = this._snap(this._xToTime(e), e, d.id);
+        d.plan = S.moveEdge(d.base, d.id, d.edge, t, this.duration, { detach: e.altKey });
+        this.preview = d.plan ? S.apply(d.base, d.plan) : null;
+      } else if (d.kind === "create" && this.editable) {
+        const r = S.create(d.base, d.t0, this._snap(this._xToTime(e), e), this.duration);
+        d.plan = r ? r.plan : null;
+        this.preview = r ? S.apply(d.base, r.plan, ["__new"]) : null;
+      }
+      this._autoscroll(x);
+      this.invalidate();
+    }
+    _up(e) {
+      const d = this.drag;
+      this.drag = null;
+      if (!d) return;
+      const t = this._xToTime(e);
+      const store = this.store;
+      if (!d.moved) {
+        if (d.kind === "select" || d.kind === "edge") {
+          if (store) store.select(d.id);
+        } else if (store) store.select(null);
+        this.player.seekTo(t);
+      } else if (d.plan && store) {
+        store.apply(d.plan, { select: d.kind === "create" ? "created" : d.id });
+      }
+      this.preview = null;
+      this.invalidate();
+    }
+    // While dragging near the lane's edges, scroll the view.
+    _autoscroll(x) {
+      const w = this.dt.clientWidth;
+      const margin = 24;
+      if (x < margin) this.viewStart -= this.span * 0.02;
+      else if (x > w - margin) this.viewStart += this.span * 0.02;
+      else return;
+      this._clampView();
+    }
+    // Make sure segment g is visible in the detail lane.
+    revealSegment(g) {
+      if (!g) return;
+      if (g.end - g.start > this.span * 0.9) this.span = Math.min(this.duration, (g.end - g.start) / 0.8);
+      if (g.start < this.viewStart || g.end > this.viewStart + this.span) this.viewStart = g.start - (this.span - (g.end - g.start)) / 2;
+      this.follow = false;
+      this._clampView();
+      this.invalidate();
     }
 
     get duration() {
@@ -277,6 +404,13 @@
             const x0 = (b.start(i) / d) * w;
             ctx.fillRect(x0, h - 3 * dpr, (b.end(i) / d) * w - x0, 3 * dpr);
           }
+          // segments band (top)
+          const sel = this.store && this.store.selected;
+          for (const g of this.segs) {
+            const x0 = (g.start / d) * w;
+            ctx.fillStyle = g.id === sel ? C.accent : C.segOv;
+            ctx.fillRect(x0, 0, Math.max(dpr, ((g.end - g.start) / d) * w), 3 * dpr);
+          }
           // detail window
           const vx = (this.viewStart / d) * w;
           const vw = Math.max(2, (this.span / d) * w);
@@ -320,9 +454,46 @@
           }
           ctx.fillStyle = C.tick;
           ctx.fillRect(0, rulerH, w, dpr);
+          // segment blocks (behind the waveform)
+          const sel = this.store && this.store.selected;
+          const segs = this.segs;
+          for (const g of segs) {
+            const x0 = toX(g.start);
+            const x1 = toX(g.end);
+            if (x1 < 0 || x0 > w) continue;
+            ctx.fillStyle = g.id === sel ? C.segSelFill : g.id === "__new" ? C.segNewFill : C.segFill;
+            ctx.fillRect(x0, rulerH + dpr, x1 - x0, h - rulerH - dpr);
+          }
           // waveform
           const playX = toX(t);
           this._wave(ctx, 0, w, rulerH + 6 * dpr, h - rulerH - 12 * dpr, t0, span, playX, gain);
+          // segment edges and numbers (on top)
+          ctx.font = `600 ${10.5 * dpr}px system-ui, sans-serif`;
+          ctx.textBaseline = "middle";
+          segs.forEach((g, i) => {
+            const x0 = toX(g.start);
+            const x1 = toX(g.end);
+            if (x1 < -2 || x0 > w + 2) return;
+            const isSel = g.id === sel;
+            const col = isSel || g.id === "__new" ? C.accent : C.segEdge;
+            for (const [edge, x] of [["start", x0], ["end", x1]]) {
+              const hot = this.hoverEdge && this.hoverEdge.id === g.id && this.hoverEdge.edge === edge;
+              ctx.fillStyle = hot ? C.accent : col;
+              const lw = (hot ? 3 : isSel ? 2 : 1.5) * dpr;
+              ctx.fillRect(Math.round(x - lw / 2), rulerH + dpr, lw, h - rulerH - dpr);
+            }
+            if (g.id !== "__new" && x1 - x0 > 18 * dpr) {
+              const label = String(i + 1);
+              const tw = ctx.measureText(label).width + 8 * dpr;
+              const lx = Math.max(x0, 0) + 3 * dpr;
+              if (lx + tw < x1) {
+                ctx.fillStyle = isSel ? C.accent : C.segTag;
+                ctx.fillRect(lx, rulerH + 4 * dpr, tw, 14 * dpr);
+                ctx.fillStyle = "#fff";
+                ctx.fillText(label, lx + 4 * dpr, rulerH + 11 * dpr);
+              }
+            }
+          });
           // hover line + time
           if (this.hoverX != null) {
             const hx = Math.round(this.hoverX * dpr);
