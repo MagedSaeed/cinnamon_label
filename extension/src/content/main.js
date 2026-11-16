@@ -156,7 +156,26 @@
       ui.timeline.setMessage("The waveform fills in as the video downloads.");
       const onProgress = (p) => !this.dead && ui.setNet({ kind: "downloading", ...p, waiting: !(p.rate > 0) && p.loaded < (p.total || Infinity) });
       const onChunk = () => this.pumpAudio();
-      const acquire = () => CL.acquireSlot(() => (document.visibilityState === "visible" ? 0 : 1));
+      // In Label Studio's own UI its player streams the video itself: our download then keeps to two
+      // connections (its waveform waits for our copy instead of downloading the file again), so
+      // that player and Label Studio's API calls (Submit) keep theirs.
+      this.nativeHeld = 0;
+      const acquire = async () => {
+        while (CL.getMode() === "native" && this.nativeHeld >= 2 && !this.dead) await new Promise((r) => setTimeout(r, 400));
+        const native = CL.getMode() === "native";
+        if (native) this.nativeHeld++;
+        let release;
+        try {
+          release = await CL.acquireSlot(() => (document.visibilityState === "visible" ? 0 : 1));
+        } catch (e) {
+          if (native) this.nativeHeld--;
+          throw e;
+        }
+        return () => {
+          if (native) this.nativeHeld--;
+          release();
+        };
+      };
       if (pre) {
         // Adopt the running download: it now reports here and gets the open task's priority.
         this.dl = pre.dl;
@@ -344,6 +363,22 @@
       m.load();
     }
   }
+  // In the native UI, point Label Studio's own player at the saved copy once we have it (so it plays
+  // without stalls and stops using the network). Only while it is paused, keeping its position.
+  function nativeUseSavedCopy() {
+    if (!task || !task.blob) return;
+    const url = (nativeBlobUrl ||= URL.createObjectURL(task.blob));
+    document.querySelectorAll("video, audio").forEach((m) => {
+      if (!isTaskMedia(m) || !m.paused || m.seeking) return;
+      const at = m.currentTime || 0;
+      if (m.hasAttribute("src")) m.setAttribute("src", url);
+      m.querySelectorAll("source").forEach((x) => x.hasAttribute("src") && x.setAttribute("src", url));
+      m.addEventListener("loadedmetadata", () => {
+        if (at) m.currentTime = at;
+      }, { once: true });
+      m.load();
+    });
+  }
   function dropNativeBlobUrl() {
     if (nativeBlobUrl) URL.revokeObjectURL(nativeBlobUrl);
     nativeBlobUrl = null;
@@ -363,7 +398,10 @@
     ui.show(ours);
     ui.showPill(!ours, failedHere ? "Cinnamon Label hit an error on this task and switched to the native UI." : "");
     if (ours) parkNativeMedia();
-    else unparkNativeMedia();
+    else {
+      unparkNativeMedia();
+      nativeUseSavedCopy();
+    }
   }
 
   async function poll() {
