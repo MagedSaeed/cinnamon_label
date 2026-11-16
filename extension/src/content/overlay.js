@@ -58,7 +58,7 @@ video:not([data-ready]){visibility:hidden}
 .transport{display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding:8px 14px; border-top:1px solid var(--line)}
 .transport .zone{display:flex; align-items:center; gap:12px; flex:none}
 .transport .segbar{flex:1}
-.cn{height:16px}
+.lanes .ov{margin-bottom:8px}
 .play{width:36px; height:36px; border-radius:50%; border:none; background:var(--cinnamon); color:#fff; display:grid; place-items:center; flex:none}
 .play svg{width:18px; height:18px; fill:currentColor}
 .play:disabled{opacity:.4; cursor:default}
@@ -138,7 +138,6 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <section class="lanes">
           <canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas>
-          <canvas class="cn" id="cn" aria-hidden="true"></canvas>
           <canvas class="dt" id="dt" aria-label="Detail. Click to jump."></canvas>
         </section>
       </div>`);
@@ -321,7 +320,6 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         // Timeline lanes; the zoom label follows the detail lane's width.
         const timeline = new CL.Timeline({
           overview: $("ov"),
-          connector: $("cn"),
           detail: $("dt"),
           player,
           onView: (tl) => {

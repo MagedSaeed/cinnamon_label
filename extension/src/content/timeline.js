@@ -1,6 +1,5 @@
 // Two-lane timeline drawn on canvases.
-//  Overview: the whole video. Click or drag to seek. Shows played part, buffered strip, and the
-//            window shown in the detail lane.
+//  Overview: the whole video, with segments and suggestions in miniature. Click or drag to seek.
 //  Detail:   a zoomed window (15 s by default) that follows the playhead. Ruler with times.
 //            Ctrl+wheel or the buttons zoom; the wheel pans. Click to seek.
 // The <video> element is the only clock; the timeline only reads it and seeks it.
@@ -14,10 +13,6 @@
     played: "#3d4452",
     center: "#d9dde3",
     accent: "#8a4b2a",
-    accentFill: "rgba(138,75,42,0.08)",
-    accentLine: "#8a4b2a",
-    lensFill: "rgba(138,75,42,0.13)",
-    lensLine: "rgba(138,75,42,0.85)",
     buffered: "#c3c8d0",
     ruler: "#8c93a0",
     tick: "#d9dde3",
@@ -49,9 +44,8 @@
   }
 
   CL.Timeline = class Timeline {
-    constructor({ overview, connector, detail, player, onView }) {
+    constructor({ overview, detail, player, onView }) {
       this.ov = overview;
-      this.cn = connector || null;
       this.dt = detail;
       this.player = player;
       this.v = player.v;
@@ -86,29 +80,15 @@
         this._reveal(t, true);
         this.invalidate();
       };
-      const inBox = (t) => t >= this.viewStart && t <= this.viewStart + this.span && this.span < this.duration;
+      // Overview: click or drag anywhere to seek.
       CL.on(this.ov, "pointerdown", (e) => {
         if (!this.duration || e.button !== 0) return;
         this.ov.setPointerCapture(e.pointerId);
-        const t = ovTime(e);
-        if (inBox(t)) {
-          ovDrag = { mode: "view", grabT: t - this.viewStart };
-          this.follow = false;
-        } else {
-          ovDrag = { mode: "seek" };
-          ovSeek(e);
-        }
+        ovDrag = { mode: "seek" };
+        ovSeek(e);
       });
       CL.on(this.ov, "pointermove", (e) => {
-        if (!ovDrag) {
-          this.ov.style.cursor = this.duration && inBox(ovTime(e)) ? "grab" : "pointer";
-          return;
-        }
-        if (ovDrag.mode === "seek") return ovSeek(e);
-        this.ov.style.cursor = "grabbing";
-        this.viewStart = ovTime(e) - ovDrag.grabT;
-        this._clampView();
-        this.invalidate();
+        if (ovDrag) ovSeek(e);
       });
       const ovEnd = () => {
         ovDrag = null;
@@ -462,53 +442,9 @@
             const x0 = (b.start(i) / d) * w;
             ctx.fillRect(x0, h - 3 * dpr, (b.end(i) / d) * w - x0, 3 * dpr);
           }
-          // detail window
-          const vx = (this.viewStart / d) * w;
-          const vw = Math.max(2, (this.span / d) * w);
-          ctx.fillStyle = C.accentFill;
-          ctx.fillRect(vx, 0, vw, h);
-          // a solid 2 px frame, open at the bottom where the lens connector continues it
-          ctx.strokeStyle = C.accentLine;
-          ctx.lineWidth = 2 * dpr;
-          const inset = dpr;
-          ctx.beginPath();
-          ctx.moveTo(vx + inset, h);
-          ctx.lineTo(vx + inset, inset);
-          ctx.lineTo(vx + vw - inset, inset);
-          ctx.lineTo(vx + vw - inset, h);
-          ctx.stroke();
           // playhead
           ctx.fillStyle = C.accent;
           ctx.fillRect(Math.round(playX - dpr), 0, 2 * dpr, h);
-        }
-      }
-
-      // ---- connector: the overview's box opens up into the detail lane below (a zoom lens) ----
-      if (this.cn) {
-        const { w, h } = fitCanvas(this.cn);
-        const ctx = this.cn.getContext("2d");
-        ctx.clearRect(0, 0, w, h);
-        if (d) {
-          const ow = this.ov.clientWidth;
-          const sx = w / Math.max(1, ow); // same width as the lanes; guard anyway
-          const x0 = (this.viewStart / d) * ow * sx;
-          const x1 = ((this.viewStart + this.span) / d) * ow * sx;
-          ctx.beginPath();
-          ctx.moveTo(x0, 0);
-          ctx.lineTo(x1, 0);
-          ctx.lineTo(w, h);
-          ctx.lineTo(0, h);
-          ctx.closePath();
-          ctx.fillStyle = C.lensFill;
-          ctx.fill();
-          ctx.strokeStyle = C.lensLine;
-          ctx.lineWidth = 2 * Math.max(1, window.devicePixelRatio || 1);
-          ctx.beginPath();
-          ctx.moveTo(x0, 0);
-          ctx.lineTo(0.5, h);
-          ctx.moveTo(x1, 0);
-          ctx.lineTo(w - 0.5, h);
-          ctx.stroke();
         }
       }
 
