@@ -32,6 +32,73 @@ async function devTick(dirty) {
   return { reloading: true };
 }
 
+// ---------- shared download budget ----------
+// The site is HTTP/1.1: Chrome opens at most 6 connections to it, shared by ALL tabs. Every
+// downloader chunk takes a slot here first, so all tabs together never use more than `limit`
+// connections and Label Studio's own requests (saving, Submit) always get through.
+// Priority: 0 = task in the visible tab, 1 = task in a background tab, 2 = prefetch.
+const LEASE_MS = 120000; // a slot that is never released (crashed tab) frees itself
+const leases = new Map(); // id -> { tabId, until }
+let waiting = []; // { priority, tabId, t, respond }
+let limit = 3;
+let sweepTimer = 0;
+chrome.storage.sync.get({ connections: 3 }, (s) => {
+  limit = Math.max(1, Math.min(4, s.connections | 0));
+  grant();
+});
+chrome.storage.onChanged.addListener((ch, area) => {
+  if (area === "sync" && ch.connections) {
+    limit = Math.max(1, Math.min(4, ch.connections.newValue | 0));
+    grant();
+  }
+});
+
+function grant() {
+  const now = Date.now();
+  for (const [id, l] of leases) if (l.until < now) leases.delete(id);
+  waiting.sort((a, b) => a.priority - b.priority || a.t - b.t);
+  while (leases.size < limit && waiting.length) {
+    const w = waiting.shift();
+    const id = crypto.randomUUID();
+    leases.set(id, { tabId: w.tabId, until: now + LEASE_MS });
+    try {
+      w.respond({ ok: true, lease: id });
+    } catch (_) {
+      leases.delete(id); // the asking page is gone
+    }
+  }
+  // Re-check later so expired leases free up even if nobody asks (one timer at a time).
+  if (leases.size && !sweepTimer) sweepTimer = setTimeout(() => ((sweepTimer = 0), grant()), 15000);
+}
+
+function dropTab(tabId) {
+  for (const [id, l] of leases) if (l.tabId === tabId) leases.delete(id);
+  waiting = waiting.filter((w) => w.tabId !== tabId);
+  grant();
+}
+chrome.tabs.onRemoved.addListener(dropTab);
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const tabId = sender.tab ? sender.tab.id : -1;
+  if (msg && msg.type === "CL_SLOT_ACQUIRE") {
+    waiting.push({ priority: msg.priority | 0, tabId, t: Date.now(), respond: sendResponse });
+    grant();
+    return true; // answered when a slot is free
+  }
+  if (msg && msg.type === "CL_SLOT_RELEASE") {
+    leases.delete(msg.lease);
+    grant();
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg && msg.type === "CL_SLOT_RESET") {
+    dropTab(tabId); // the page reloaded: its old downloads are gone
+    sendResponse({ ok: true });
+    return false;
+  }
+  return false;
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === "CL_DEV_TICK") {
     devTick(!!msg.dirty)

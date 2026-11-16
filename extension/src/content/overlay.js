@@ -14,7 +14,7 @@
 .app{
   --ink:#1d2129; --muted:#5d6573; --faint:#8c93a0; --line:#e3e6eb; --surface:#f5f6f8; --panel:#fff;
   --cinnamon:#8a4b2a; --cinnamon-soft:#f3e9e3; --ok:#2f7d5b; --warn:#9a6212; --err:#b42318;
-  position:absolute; inset:0; display:grid; grid-template-rows:auto 1fr auto; background:var(--panel);
+  position:absolute; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto auto; background:var(--panel);
   color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
   border-left:1px solid var(--line);
 }
@@ -50,15 +50,18 @@ video:not([data-ready]){visibility:hidden}
 .play:disabled{opacity:.4; cursor:default}
 .clock{font-variant-numeric:tabular-nums; color:var(--muted); white-space:nowrap}
 .clock b{color:var(--ink); font-weight:600}
-/* Seek bar, YouTube-style: played (cinnamon), buffered and playable without stopping (grey), not yet loaded (light).
-   --track is set from JS as layered gradients. */
-.seek{-webkit-appearance:none; appearance:none; flex:1; min-width:80px; height:18px; margin:0; background:transparent; cursor:pointer;
-  --track:linear-gradient(var(--line),var(--line))}
-.seek::-webkit-slider-runnable-track{height:5px; border-radius:3px; background:var(--track)}
-.seek::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:13px; height:13px; margin-top:-4px; border:none; border-radius:50%;
-  background:var(--cinnamon); box-shadow:0 0 0 2px #fff}
-.seek:focus-visible{outline:none}
-.seek:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--cinnamon)}
+/* Timeline lanes (drawn by timeline.js) */
+.lanes{padding:4px 14px 12px}
+.lanes canvas{display:block; width:100%}
+.ov{height:40px; cursor:pointer; border-radius:4px}
+.dt{height:150px; margin-top:8px; border:1px solid var(--line); border-radius:6px}
+.zoom{display:flex; align-items:center; gap:2px; color:var(--muted); font-variant-numeric:tabular-nums}
+.zoom button{width:26px; height:26px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); font-size:15px; line-height:1}
+.zoom button:hover{border-color:#c9ced6}
+.zoom input{width:58px; padding:3px 2px; text-align:center; font:inherit; color:var(--ink); background:transparent;
+  border:1px solid transparent; border-radius:6px; cursor:text; font-variant-numeric:tabular-nums}
+.zoom input:hover{border-color:var(--line)}
+.zoom input:focus{border-color:var(--cinnamon); background:var(--panel); outline:none}
 .speed{display:flex; align-items:center; gap:6px; color:var(--muted)}
 .speed select{font:inherit; border:1px solid var(--line); border-radius:6px; padding:3px 6px; background:var(--panel); color:var(--ink)}
 @media (prefers-reduced-motion:reduce){ .net .meter b{transition:none} }
@@ -104,7 +107,10 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         <footer class="transport">
           <button class="play" id="play" aria-label="Play" disabled>${ICON_PLAY}</button>
           <span class="clock"><b id="cur">0:00.0</b> / <span id="dur">–</span></span>
-          <input class="seek" id="seek" type="range" min="0" max="0" step="0.05" value="0" aria-label="Position">
+          <div class="spacer"></div>
+          <div class="zoom" title="Detail lane width. Ctrl + mouse wheel on the lane also zooms; the wheel scrolls.">
+            <button id="zoomOut" aria-label="Show more time">−</button><input id="zoomTxt" value="15 s" spellcheck="false" autocomplete="off" inputmode="decimal" aria-label="Seconds shown in the detail lane" title="Type a width, e.g. 8 or 1:30, then press Enter"><button id="zoomIn" aria-label="Show less time">+</button>
+          </div>
           <label class="speed">Speed
             <select id="rate" aria-label="Playback speed">
               <option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option>
@@ -112,6 +118,10 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
             </select>
           </label>
         </footer>
+        <section class="lanes">
+          <canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas>
+          <canvas class="dt" id="dt" aria-label="Detail. Click to jump."></canvas>
+        </section>
       </div>`);
     root.appendChild(app);
     const $ = (id) => root.getElementById(id);
@@ -231,39 +241,13 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
       bindPlayer(player) {
         const v = player.v;
         const play = $("play");
-        const seek = $("seek");
-        let dragging = false;
         const paint = () => {
           play.innerHTML = v.paused || v.ended ? ICON_PLAY : ICON_PAUSE;
           play.setAttribute("aria-label", v.paused || v.ended ? "Play" : "Pause");
         };
-        // Bar layers: played on top, then what the player has buffered, then the empty track.
-        const paintBar = () => {
-          const d = v.duration;
-          if (!Number.isFinite(d) || d <= 0) {
-            seek.style.setProperty("--track", "linear-gradient(var(--line),var(--line))");
-            return;
-          }
-          const pct = (t) => ((100 * Math.max(0, Math.min(d, t))) / d).toFixed(3) + "%";
-          const now = pct(dragging ? Number(seek.value) : v.currentTime || 0);
-          const played = `linear-gradient(to right, var(--cinnamon) ${now}, transparent ${now})`;
-          const stops = ["transparent 0%"];
-          const b = v.buffered;
-          for (let i = 0; i < b.length; i++) {
-            const s = pct(b.start(i));
-            const e = pct(b.end(i));
-            stops.push(`transparent ${s}`, `#b8bec8 ${s}`, `#b8bec8 ${e}`, `transparent ${e}`);
-          }
-          stops.push("transparent 100%");
-          const buffered = `linear-gradient(to right, ${stops.join(", ")})`;
-          seek.style.setProperty("--track", `${played}, ${buffered}, linear-gradient(var(--line),var(--line))`);
-        };
         const tick = () => {
           $("cur").textContent = U.fmtClock(v.currentTime || 0);
-          if (!dragging) seek.value = String(v.currentTime || 0);
-          paintBar();
         };
-        CL.on(v, "progress", paintBar);
         const loop = () => {
           tick();
           if (!v.paused) requestAnimationFrame(loop);
@@ -273,12 +257,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         CL.on(v, "ended", paint);
         CL.on(v, "timeupdate", tick);
         CL.on(v, "seeked", tick);
-        CL.on(v, "durationchange", () => {
-          const d = v.duration;
-          $("dur").textContent = U.fmtClock(d);
-          seek.max = Number.isFinite(d) ? String(d) : "0";
-          paintBar();
-        });
+        CL.on(v, "durationchange", () => ($("dur").textContent = U.fmtClock(v.duration)));
         CL.on(v, "loadedmetadata", () => ((play.disabled = false), v.setAttribute("data-ready", "")));
         CL.on(v, "emptied", () => ((play.disabled = true), v.removeAttribute("data-ready"), paint(), tick()));
         CL.on(v, "waiting", () => api.setStageMessage("Buffering…"));
@@ -286,17 +265,54 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         CL.on(v, "canplay", () => api.setStageMessage(""));
         CL.on(v, "click", () => player.toggle());
         CL.on(play, "click", () => player.toggle());
-        CL.on(seek, "input", () => {
-          dragging = true;
-          player.seekTo(Number(seek.value));
-          paintBar();
-        });
-        CL.on(seek, "change", () => (dragging = false));
-        CL.on(v, "loadeddata", paintBar);
         CL.on($("rate"), "change", (e) => player.setRate(Number(e.target.value)));
         paint();
+
+        // Timeline lanes; the zoom label follows the detail lane's width.
+        const timeline = new CL.Timeline({
+          overview: $("ov"),
+          detail: $("dt"),
+          player,
+          onView: (tl) => {
+            const box = $("zoomTxt");
+            if (root.activeElement === box) return; // don't overwrite while the user is typing
+            const label = spanLabel(tl.span);
+            if (box.value !== label) box.value = label;
+          },
+        });
+        // The width is editable: click, type 8 / 8.5 / 1:30, Enter applies, Esc cancels.
+        const box = $("zoomTxt");
+        const spanLabel = (span) => (span >= 60 ? U.fmtClock(span).replace(/\.\d$/, "") : `${span < 10 ? span.toFixed(1) : Math.round(span)} s`);
+        const commit = () => {
+          const v = U.parseDuration(box.value);
+          if (v != null && v > 0) timeline.setSpan(v);
+          box.value = spanLabel(timeline.span); // shows the clamped value, or restores on bad input
+        };
+        CL.on(box, "focus", () => {
+          box.value = String(Math.round(timeline.span * 10) / 10);
+          box.select();
+        });
+        CL.on(box, "keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+            box.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            box.value = spanLabel(timeline.span);
+            box.blur();
+          }
+          e.stopPropagation(); // typing here never reaches Label Studio's hotkeys
+        });
+        CL.on(box, "blur", () => (box.value = spanLabel(timeline.span)));
+        CL.on(box, "change", commit);
+        CL.on($("zoomIn"), "click", () => timeline.zoomBy(1 / 1.5));
+        CL.on($("zoomOut"), "click", () => timeline.zoomBy(1.5));
+        api.timeline = timeline;
+        return timeline;
       },
       destroy() {
+        if (api.timeline) api.timeline.destroy();
         clearInterval(placeTimer);
         ro.disconnect();
         window.removeEventListener("resize", place);

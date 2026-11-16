@@ -4,6 +4,7 @@
 (() => {
   const CL = globalThis.CL;
   const U = CL.U;
+  const CLMP4 = globalThis.CLMP4;
   if (CL.started) return;
   CL.started = true;
 
@@ -72,6 +73,7 @@
       this.failed = false;
       ui.setTask(this.taskId);
       ui.setNet({ kind: "checking" });
+      this.resetAudio();
       let cached = null;
       try {
         cached = await CL.cache.get(this.key);
@@ -84,17 +86,26 @@
         await player.setBlob(cached);
         ui.setNet({ kind: "cached", total: cached.size });
         serveWaveform(this.key, cached);
+        const read = CL.blobReader(cached);
+        this.audioRead = read;
+        await this.startAudio(read, cached.size);
         return;
       }
 
       player.setNetwork(this.url);
+      ui.timeline.setMessage("The waveform fills in as the video downloads.");
       this.dl = new CL.Downloader(this.url, {
         connections: settings.connections,
         onProgress: (p) => !this.dead && ui.setNet({ kind: "downloading", ...p }),
+        onChunk: () => this.pumpAudio(),
+        acquire: () => CL.acquireSlot(() => (document.visibilityState === "visible" ? 0 : 1)),
       });
+      const dl = this.dl;
+      this.audioRead = async (o, n) => dl.readAvailable(o, n);
+      dl.whenTotal.then((total) => !this.dead && this.startAudio((o, n) => CL.fetchRange(this.url, o, n), total)).catch(() => {});
       let blob;
       try {
-        blob = await this.dl.run();
+        blob = await dl.run();
       } catch (e) {
         if (this.dead) return;
         CL.warn("Download failed:", e);
@@ -105,6 +116,9 @@
       }
       if (this.dead) return;
       this.blob = blob;
+      this.audioRead = CL.blobReader(blob); // the downloader's chunks are gone; finish from the Blob
+      this.pumpAudio();
+      if (this.audioNeedsWholeFile) this.decodeWholeFile();
       await player.setBlob(blob);
       serveWaveform(this.key, blob);
       ui.setNet({ kind: "saving", total: blob.size });
@@ -114,10 +128,83 @@
       if (!this.dead) ui.setNet(r.saved ? { kind: "saved", total: blob.size } : { kind: "memory", total: blob.size, reason: r.reason });
     }
 
+    // ---------- audio: waveform peaks + 16 kHz copy, decoded once ----------
+    resetAudio() {
+      if (this.audio) this.audio.close();
+      this.audio = null;
+      this.audioOk = false;
+      this.audioNeedsWholeFile = false;
+      ui.timeline.setAudio(null);
+      ui.timeline.setMessage("");
+    }
+
+    async startAudio(read, total) {
+      try {
+        const loc = await CLMP4.locateMoov(read, total);
+        const moov = await read(loc.offset, loc.size);
+        if (this.dead || !moov) return;
+        const { tracks } = CLMP4.parseMoov(moov);
+        const track = tracks.find((t) => t.handler === "soun");
+        if (!track) {
+          ui.timeline.setMessage("This video has no audio track.");
+          return;
+        }
+        const table = CLMP4.sampleTable(track);
+        const end = table.count ? table.time[table.count - 1] + table.dur[table.count - 1] : 0;
+        this.audio = new CL.AudioTrack(Math.max(track.duration, end), { onUpdate: () => ui.timeline.invalidate() });
+        ui.timeline.setAudio(this.audio);
+        this.audioOk = await this.audio.configure(track, table);
+        if (this.dead) return;
+        if (!this.audioOk) return this.needWholeFile();
+        ui.timeline.setMessage("");
+        this.pumpAudio();
+      } catch (e) {
+        CL.warn("Reading the audio track failed:", e);
+        this.needWholeFile();
+      }
+    }
+
+    pumpAudio() {
+      if (this.dead || !this.audio || !this.audioOk || !this.audioRead) return;
+      this.audio.pump(this.audioRead).catch((e) => {
+        CL.warn("Audio decoding failed; decoding the whole file instead.", e);
+        this.audioOk = false;
+        this.needWholeFile();
+      });
+    }
+
+    // WebCodecs couldn't do it: decode the complete file once it's here.
+    needWholeFile() {
+      this.audioNeedsWholeFile = true;
+      if (this.blob) this.decodeWholeFile();
+      else ui.timeline.setMessage("The waveform appears when the download finishes.");
+    }
+
+    async decodeWholeFile() {
+      if (this.dead || this._wholeFile) return;
+      this._wholeFile = true;
+      ui.timeline.setMessage("Drawing the waveform…");
+      try {
+        const v = player.v;
+        const dur = Number.isFinite(v.duration) ? v.duration : this.audio ? this.audio.duration : 0;
+        if (this.audio) this.audio.close();
+        this.audio = new CL.AudioTrack(dur, { onUpdate: () => ui.timeline.invalidate() });
+        ui.timeline.setAudio(this.audio);
+        await this.audio.decodeWholeFile(this.blob);
+        if (!this.dead) ui.timeline.setMessage("");
+      } catch (e) {
+        CL.warn("Decoding the audio failed:", e);
+        if (!this.dead) ui.timeline.setMessage("The waveform couldn't be drawn for this video.");
+      }
+    }
+
     destroy() {
       this.dead = true;
       if (this.dl) this.dl.abort();
+      if (this.audio) this.audio.close();
       player.reset();
+      ui.timeline.setAudio(null);
+      ui.timeline.setMessage("");
       releaseWaveform(this.key);
     }
   }

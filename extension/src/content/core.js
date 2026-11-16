@@ -96,5 +96,33 @@
     };
   CL.on = (el, type, fn, opts) => el.addEventListener(type, CL.guard(fn), opts);
 
+  // ---------- shared download budget (see background.js) ----------
+  // Resolves with a release() function once a connection slot is free for this download.
+  // priority: 0 visible task, 1 background-tab task, 2 prefetch.
+  CL.acquireSlot = (priority) =>
+    new Promise((resolve) => {
+      const noop = () => {};
+      const ask = () => {
+        if (!CL.alive()) return resolve(noop);
+        try {
+          chrome.runtime.sendMessage({ type: "CL_SLOT_ACQUIRE", priority: typeof priority === "function" ? priority() : priority }, (r) => {
+            if (chrome.runtime.lastError || !r || !r.ok) return setTimeout(ask, 1000); // worker restarted: ask again
+            let done = false;
+            resolve(() => {
+              if (done || !CL.alive()) return;
+              done = true;
+              chrome.runtime.sendMessage({ type: "CL_SLOT_RELEASE", lease: r.lease }, () => void chrome.runtime.lastError);
+            });
+          });
+        } catch (_) {
+          resolve(noop);
+        }
+      };
+      ask();
+    });
+  try {
+    chrome.runtime.sendMessage({ type: "CL_SLOT_RESET" }, () => void chrome.runtime.lastError);
+  } catch (_) {}
+
   CL.U = U;
 })();
