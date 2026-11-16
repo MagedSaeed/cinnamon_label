@@ -37,7 +37,15 @@
 .card{display:grid; grid-template-columns:auto minmax(0,1fr); border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden}
 .cbody{grid-column:1 / -1}
 .card{transition:background-color .25s, border-color .25s}
-.card.passing{border-color:#e6c27c; box-shadow:0 0 0 3px rgba(226,170,60,.14)}
+/* An inner glow from the left and right edges: the card being played (amber) and the open card
+   (faint cinnamon). Drawn on a layer above the contents, so header backgrounds don't hide it. */
+.card{position:relative}
+.card::after{content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:0; transition:opacity .3s}
+.card.passing{border-color:#e6c27c}
+/* --lvl (0..1): the loudness at the playhead, so the glow rises and falls with the voice. */
+.card.passing::after{opacity:1; box-shadow:inset 14px 0 18px -12px rgb(217 147 31 / calc(.06 + .26 * var(--lvl, .5))), inset -14px 0 18px -12px rgb(217 147 31 / calc(.06 + .26 * var(--lvl, .5)))}
+.card.open::after{opacity:1; box-shadow:inset 10px 0 14px -10px rgba(138,75,42,.12), inset -10px 0 14px -10px rgba(138,75,42,.12)}
+@media (prefers-reduced-motion:reduce){ .card::after{transition:none} }
 .ch .mini{grid-column:2 / -1; display:block; width:100%; height:22px; margin-top:4px}
 @media (prefers-reduced-motion:reduce){ .card{transition:none} }
 /* play this segment (beside the header: a button can't contain another button) */
@@ -330,8 +338,17 @@
         if (c && (c.mini.dataset.sig || "").split("|")[5] !== "-1") drawMini(c, g, t); // was inside: clear it
         else if (c && t >= g.start && t < g.end) drawMini(c, g, t);
       }
+      // The playing card's glow follows the loudness at the playhead (smoothed).
+      const pc = container.querySelector(".card.passing");
+      if (pc && !player.v.paused && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const r = timeline.peaks(Math.max(0, t - 0.06), t + 0.06);
+        const target = r ? Math.min(1, Math.sqrt(Math.max(r[1], -r[0]) * timeline.peakGain)) : 0;
+        glowLvl += (target - glowLvl) * 0.18;
+        pc.style.setProperty("--lvl", glowLvl.toFixed(3));
+      }
       if (!player.v.paused) miniRaf = requestAnimationFrame(miniTick);
     };
+    let glowLvl = 0;
     for (const ev of ["play", "seeked", "timeupdate"]) CL.on(player.v, ev, () => miniRaf || (miniRaf = requestAnimationFrame(miniTick)));
     // As the audio decodes, the mini waveforms fill in.
     setInterval(() => {
