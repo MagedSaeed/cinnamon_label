@@ -22,6 +22,14 @@
     }, 200);
   };
 
+  // Background downloads only use idle connections: while the open task's video is still
+  // downloading they wait (a chunk already running finishes first), so the open task gets the
+  // whole connection budget.
+  const idleSlot = async (priority) => {
+    while (CL.openDownload && CL.openDownload()) await new Promise((r) => setTimeout(r, 1000));
+    return CL.acquireSlot(priority);
+  };
+
   const apiBase = () => location.pathname.split("/projects/")[0]; // e.g. "/cinnamon"
   const viewAndProject = () => ({
     view: new URLSearchParams(location.search).get("tab"),
@@ -111,7 +119,7 @@
       Object.assign(dl, {
         onChunk: () => {},
         onProgress: () => inflight.has(key) && onStatus(),
-        acquire: () => CL.acquireSlot(2),
+        acquire: () => idleSlot(2),
       });
       const entry = { taskId, dl, blob: null, background: true, done: null };
       entry.done = runP.then(async (blob) => {
@@ -157,7 +165,7 @@
       const name = decodeURIComponent((key.split("?d=")[1] || key).split("/").pop());
       const dl = new CL.Downloader(url, {
         connections: 2,
-        acquire: () => CL.acquireSlot(priority), // look-ahead is lowest: the open task always goes first
+        acquire: () => idleSlot(priority), // only while the open task isn't downloading
         onProgress: () => inflight.has(key) && onStatus(),
       });
       const entry = { taskId, dl, blob: null, done: null, manual };

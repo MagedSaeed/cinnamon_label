@@ -330,7 +330,8 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         elx.hidden = !list || !list.length;
         if (elx.hidden) return;
         const one = (s) => `task ${s.taskId} ${s.total ? Math.floor((100 * s.loaded) / s.total) + "%" : "…"}`;
-        elx.textContent = "Background: " + list.map(one).join(", ");
+        const paused = !!(CL.openDownload && CL.openDownload());
+        elx.textContent = (paused ? "Background, after this one: " : "Background: ") + list.map(one).join(", ");
         elx.title = "Videos of other tasks downloading in the background (left unfinished, or the next tasks in your list), so they open instantly. The open task always goes first.";
       },
       // While the player streams from the server (before the download completes).
@@ -355,7 +356,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
           case "downloading": {
             const parts = [];
             parts.push(s.total ? `Downloading ${U.fmtBytes(s.loaded)} of ${U.fmtBytes(s.total)}` : `Downloading ${U.fmtBytes(s.loaded)}`);
-            if (s.rate > 0) parts.push(`${(s.rate / 1e6).toFixed(1)} MB/s`);
+            if (s.rate > 0) parts.push(s.rate >= 1e5 ? `${(s.rate / 1e6).toFixed(1)} MB/s` : `${Math.max(1, Math.round(s.rate / 1e3))} KB/s`);
             else if (s.waiting) parts.push("waiting for a free connection");
             const eta = U.fmtEta(s.eta);
             if (eta) parts.push(eta);
