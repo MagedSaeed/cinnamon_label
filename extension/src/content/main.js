@@ -430,6 +430,9 @@
     if (!CL.alive()) CL.setActive(false); // nobody left to serve held requests
     timers.forEach(clearInterval);
     try {
+      CL.taskList.stop();
+    } catch (_) {}
+    try {
       unparkNativeMedia(); // give Label Studio its media back before anything else
     } catch (_) {}
     try {
@@ -558,6 +561,9 @@
     });
     panel.setUi(ui);
     CL.prefetch.setStatusListener((s) => ui && ui.setAhead(s));
+    // The open task's own download, for its button in the task list.
+    CL.openDownload = () => (task && task.dl && !task.blob && !task.dl.aborted ? { taskId: task.taskId, loaded: task.dl.loaded, total: task.dl.total } : null);
+    CL.taskList.start();
     ui.setCloseUp(!!settings.closeUp);
     CL.allowMove = !!settings.moveSegments;
     ui.onNative(() => setMode("native"));

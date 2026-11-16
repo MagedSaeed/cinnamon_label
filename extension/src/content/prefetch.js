@@ -116,14 +116,39 @@
       inflight.set(key, entry);
     },
 
-    async _download(taskId, url, key, settings) {
+    // The user asked for this task's video from the task list: download it now (above look-ahead,
+    // below the open task). again: replace the saved copy.
+    manual(taskId, url, settings) {
+      const key = U.mediaKey(url);
+      if (inflight.has(key)) return;
+      this._download(taskId, url, key, settings, { priority: 1, manual: true }).finally(onStatus);
+      onStatus();
+    },
+
+    // Stop a background download of this task (look-ahead, left behind, or asked from the list).
+    stop(taskId) {
+      for (const [k, e] of inflight) {
+        if (Number(e.taskId) !== Number(taskId) || e.blob) continue;
+        e.dl.abort();
+        inflight.delete(k);
+      }
+      onStatus();
+    },
+
+    // { loaded, total } of this task's background download, or null.
+    statusOf(taskId) {
+      for (const e of inflight.values()) if (Number(e.taskId) === Number(taskId) && !e.blob) return { loaded: e.dl.loaded, total: e.dl.total };
+      return null;
+    },
+
+    async _download(taskId, url, key, settings, { priority = 2, manual = false } = {}) {
       const name = decodeURIComponent((key.split("?d=")[1] || key).split("/").pop());
       const dl = new CL.Downloader(url, {
         connections: 2,
-        acquire: () => CL.acquireSlot(2), // lowest priority: the open task always goes first
+        acquire: () => CL.acquireSlot(priority), // look-ahead is lowest: the open task always goes first
         onProgress: () => inflight.has(key) && onStatus(),
       });
-      const entry = { taskId, dl, blob: null, done: null };
+      const entry = { taskId, dl, blob: null, done: null, manual };
       entry.done = dl.run().then(async (blob) => {
         entry.blob = blob;
         await CL.cache.put(key, blob, settings.cacheLimitGB * 1e9, { taskId, name }).catch(CL.warn);
@@ -133,7 +158,7 @@
       try {
         await entry.done;
       } catch (e) {
-        if (!dl.aborted) CL.warn(`Look-ahead download of task ${taskId} failed:`, e);
+        if (!dl.aborted) CL.warn(`Background download of task ${taskId} failed:`, e);
       } finally {
         if (inflight.get(key) === entry) inflight.delete(key);
       }
