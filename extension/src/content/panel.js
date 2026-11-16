@@ -60,7 +60,7 @@
 .cplay:hover + .ch{background:var(--surface)}
 .card.open .cplay:hover + .ch{background:var(--cinnamon-soft)}
 .card.open{border-color:#e2c3b0; box-shadow:0 2px 10px rgba(138,75,42,.07)}
-.ch{display:grid; grid-template-columns:auto 1fr auto auto; align-items:center; column-gap:12px; row-gap:3px; width:100%; padding:10px 12px;
+.ch{display:grid; grid-template-columns:auto 1fr auto auto auto; align-items:center; column-gap:12px; row-gap:3px; width:100%; padding:10px 12px;
   border:0; background:none; text-align:left; cursor:pointer; font-variant-numeric:tabular-nums}
 .ch:hover{background:var(--surface)}
 .card.open .ch{background:var(--cinnamon-soft); border-bottom:1px solid #ecdcd2}
@@ -73,11 +73,20 @@
 .card.open .ch .chev{transform:rotate(180deg)}
 .ch .sub{grid-column:2 / -1; display:flex; flex-wrap:wrap; gap:4px; margin-top:2px}
 .ch .sub .tag{padding:1px 7px; border:1px solid var(--line); border-radius:999px; background:#f3f4f6; color:#3d4452; font-size:12px; line-height:1.5; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.card.skipped{background:#fafbfc}
+.card.skipped:not(.open) .ch, .card.skipped:not(.open) .cplay{opacity:.82}
+.card.skipped .ch .mini{filter:grayscale(1)}
+.ch .sub .tag[data-k="m"]{background:#e7f0fb; border-color:#b9d3f1; color:#1f4f8a; font-weight:600}
+.ch .sub .tag[data-k="f"]{background:#fbe9f1; border-color:#f0bfd4; color:#8a2554; font-weight:600}
 .ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font-family:"Noto Naskh Arabic","Amiri","Scheherazade New","Noto Sans Arabic","Segoe UI",serif}
 .ch .pv.none{direction:ltr; text-align:left; font-family:inherit; font-size:12.5px; color:var(--faint); font-style:italic}
 .cb{padding:12px 14px 14px}
 .pill{padding:2px 10px; border-radius:999px; font-size:12px; white-space:nowrap}
+.ch .lp{grid-row:1; grid-column:3; padding:2px 9px; border:1px solid var(--cinnamon); border-radius:999px; color:var(--cinnamon); background:#fff; font-size:12px; font-weight:600; white-space:nowrap; cursor:pointer}
+.ch .lp:hover{background:var(--cinnamon); color:#fff}
+.ch .pill{grid-row:1; grid-column:4}
+.ch .chev{grid-row:1; grid-column:5}
 .pill.ok{background:#e7f3ed; color:var(--ok)}
 .pill.need{background:#fff; color:var(--cinnamon); border:1px solid #ead7cb}
 .empty{margin:0; color:var(--ink); line-height:1.5}
@@ -384,11 +393,31 @@
     CL.on($("aUnsel"), "click", () => store && store.select(null));
 
     // ---- cards: the play button plays (or pauses) just that segment, without opening it ----
+    // The segment being replayed (by id, so editing its times doesn't lose it).
+    let rangeSeg = null;
+    const playSeg = (g, opts) => {
+      rangeSeg = g.id;
+      player.playRange(g.start, g.end, opts);
+    };
     const playingId = () => {
       const r = player._range;
-      if (!r || player.v.paused) return null;
-      const g = store && store.segments.find((x) => Math.abs(x.start - r[0]) < 0.002 && Math.abs(x.end - r[1]) < 0.002);
-      return g ? g.id : null;
+      if (!r || player.v.paused || !rangeSeg || !store || !store.byId(rangeSeg)) return null;
+      return rangeSeg;
+    };
+    // Its times changed while it plays (edge drag, − / +, typed time, move): play the new range.
+    const syncRange = () => {
+      const r = player._range;
+      if (!r || !rangeSeg || !store) return;
+      const g = store.byId(rangeSeg);
+      if (!g) {
+        rangeSeg = null; // deleted or merged away
+        return;
+      }
+      if (Math.abs(g.start - r[0]) < 1e-6 && Math.abs(g.end - r[1]) < 1e-6) return;
+      r[0] = g.start;
+      r[1] = g.end;
+      const t = player.v.currentTime || 0;
+      if (t < g.start || t >= g.end) player.seekTo(g.start); // the playhead fell outside: start over
     };
     const paintPlay = () => {
       const on = playingId();
@@ -398,6 +427,8 @@
         c.play.firstChild.innerHTML = isOn ? I.pauseSmall : I.playSmall;
         c.play.title = isOn ? "Pause" : "Play this segment";
         c.play.setAttribute("aria-label", c.play.title);
+        // Looping is always shown on its card, open or collapsed, so it is never a mystery.
+        c.lp.hidden = !(isOn && player._loop);
       }
     };
     for (const ev of ["play", "pause", "ended", "seeking"]) CL.on(player.v, ev, () => setTimeout(paintPlay, 0));
@@ -408,7 +439,7 @@
       const g = store && store.byId(id);
       if (!g) return;
       if (playingId() === id) player.v.pause();
-      else player.playRange(g.start, g.end);
+      else playSeg(g);
     });
 
     // ---- cards: click a header to open (or close) that segment ----
@@ -488,10 +519,11 @@
         localStorage.setItem(LOOP_KEY, on ? "1" : "0");
       } catch (_) {}
       player.setLoop(on); // applies to a replay already playing
+      paintPlay();
     };
     const play = () => {
       const g = sel();
-      if (g) player.playRange(g.start, g.end, { loop: loopOn() });
+      if (g) playSeg(g, { loop: loopOn() });
     };
     CL.on($("aPlay"), "click", play);
     CL.on($("aSplit"), "click", async () => {
@@ -641,7 +673,7 @@
       store.select(nx.id);
       timeline.revealSegment(nx);
       // Play it right away: this replaces the previous replay (and its loop); it loops too if Loop is on.
-      player.playRange(nx.start, nx.end, { loop: loopOn() });
+      playSeg(nx, { loop: loopOn() });
     }
 
     // ---- cards: created once per segment id, updated in place (never rebuilt under the cursor) ----
@@ -653,9 +685,15 @@
       rootEl.className = "card";
       rootEl.dataset.id = id;
       rootEl.setAttribute("role", "listitem");
-      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span><canvas class="mini" aria-hidden="true"></canvas></button><div class="cbody"></div>`;
+      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="lp" hidden title="This segment is looping. Click to stop.">↻ Looping</span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span><canvas class="mini" aria-hidden="true"></canvas></button><div class="cbody"></div>`;
       const q = (s) => rootEl.querySelector(s);
-      c = { root: rootEl, play: q(".cplay"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), sub: q(".sub"), pv: q(".pv"), mini: q(".mini"), body: q(".cbody") };
+      c = { root: rootEl, play: q(".cplay"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), lp: q(".lp"), sub: q(".sub"), pv: q(".pv"), mini: q(".mini"), body: q(".cbody") };
+      // "Looping" badge: stops the loop, without opening or closing the card.
+      c.lp.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        player.v.pause();
+      });
       cards.set(id, c);
       return c;
     }
@@ -794,6 +832,10 @@
               ...sm.tags.map((x) => {
                 const tag = document.createElement("span");
                 tag.className = "tag";
+                // Speaker gender matters most: its own colour, whatever the project calls it.
+                const k = String(x.text).trim().toLowerCase();
+                if (/^(male|man|ذكر)$/.test(k)) tag.dataset.k = "m";
+                else if (/^(female|woman|أنثى|انثى)$/.test(k)) tag.dataset.k = "f";
                 tag.textContent = x.text;
                 tag.title = x.q;
                 return tag;
@@ -801,6 +843,8 @@
             );
           }
           c.sub.hidden = !sm.tags.length;
+          // Answered with a "Skip…" option: grayed a little, so the segments that count stand out.
+          c.root.classList.toggle("skipped", sm.tags.some((x) => /^skip\b/i.test(String(x.text).trim())));
           c.pv.textContent = sm.pv || "No transcript yet";
           c.pv.classList.toggle("none", !sm.pv);
           c.pv.hidden = !form;
@@ -816,6 +860,7 @@
         }
 
         drawMinis();
+        syncRange();
 
         // the open card holds the form
         if (g) {
