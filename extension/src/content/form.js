@@ -18,13 +18,10 @@
 .grp > .tcard{margin:6px 0 2px}
 .q{display:grid; grid-template-columns:minmax(130px,180px) 1fr; column-gap:14px; align-items:start; padding:9px 0; border-top:1px solid var(--line)}
 .rows > .q:first-child, .rows > .tg:first-child{border-top:0; padding-top:2px}
-/* Follow-ups: answers stay aligned with the rows above; only the label is indented, with a small
-   elbow connector showing which answer revealed it (a tree, not stacked rules). */
-.q.nested{border-top:0; padding-top:3px}
-.q.nested > .lab{position:relative; padding-left:calc((var(--d) + 1) * 16px)}
-.q.nested > .lab::before{content:""; position:absolute; left:calc(var(--d) * 16px + 3px); top:3px; width:9px; height:11px;
-  border-left:1.5px solid #cfa98f; border-bottom:1.5px solid #cfa98f; border-bottom-left-radius:4px}
-.tg.nested{border-top:0; padding-top:3px; padding-left:calc((var(--d) + 1) * 16px)}
+/* Follow-up questions sit at the same level as the others, each separated by a hairline; they
+   simply appear right after the question whose answer reveals them. */
+.grp > .q + .q, .grp > .q + .tg, .grp > .tg + .q, .grp > .tg + .tg{border-top:1px solid var(--line); padding-top:9px}
+.grp > [hidden] + .q, .grp > [hidden] + .tg{border-top:1px solid var(--line)}
 .lab{display:flex; align-items:center; gap:6px; min-height:28px; font-size:13px; font-weight:600; color:var(--ink); line-height:1.3}
 .lab .dot{width:6px; height:6px; border-radius:50%; background:var(--cinnamon); flex:none; visibility:hidden}
 .need > .lab .dot, .tcard.need .dot{visibility:visible}
