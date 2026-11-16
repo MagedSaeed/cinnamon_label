@@ -32,6 +32,9 @@
 .cards{display:flex; flex-direction:column; gap:8px}
 .card{display:grid; grid-template-columns:auto minmax(0,1fr); border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden}
 .cbody{grid-column:1 / -1}
+.card{transition:background-color .25s, border-color .25s}
+.card.passing{background:#fdf4e1; border-color:#e8c88a}
+@media (prefers-reduced-motion:reduce){ .card{transition:none} }
 /* play this segment (beside the header: a button can't contain another button) */
 .cplay{align-self:stretch; display:grid; place-items:start center; width:40px; padding:12px 0 0 8px; border:0; background:none; color:var(--muted)}
 .cplay span{display:grid; place-items:center; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--panel)}
@@ -53,7 +56,8 @@
 .ch .t span{font-weight:400; color:var(--muted); margin-left:8px}
 .ch .chev{width:16px; height:16px; color:var(--muted); transition:transform .15s}
 .card.open .ch .chev{transform:rotate(180deg)}
-.ch .sub{grid-column:2 / -1; color:var(--muted); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ch .sub{grid-column:2 / -1; display:flex; flex-wrap:wrap; gap:4px; margin-top:2px}
+.ch .sub .tag{padding:1px 7px; border:1px solid var(--line); border-radius:999px; background:#f3f4f6; color:#3d4452; font-size:12px; line-height:1.5; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font-family:"Noto Naskh Arabic","Amiri","Scheherazade New","Noto Sans Arabic","Segoe UI",serif}
 .ch .pv.none{direction:ltr; text-align:left; font-family:inherit; font-size:12.5px; color:var(--faint); font-style:italic}
@@ -254,6 +258,28 @@
       if (g) $("aSplit").disabled = !editable() || !S.split(base(), g.id, t, splitGapMs() / 1000);
     }
     for (const ev of ["timeupdate", "seeked"]) CL.on(player.v, ev, paintMarkEnd);
+
+    // Reviewing: playing with no segment selected lights the card of the segment being played
+    // (the waveform does the same), and keeps it in view.
+    let passingId = null;
+    const paintPassing = () => {
+      const v = player.v;
+      const t = v.currentTime || 0;
+      const g = !store || store.selected || v.paused ? null : store.segments.find((x) => x.start <= t && t < x.end);
+      const id = g ? g.id : null;
+      if (id === passingId) return;
+      passingId = id;
+      container.querySelectorAll(".card.passing").forEach((c) => c.classList.remove("passing"));
+      if (id) {
+        const card = [...container.querySelectorAll(".card")].find((c) => c.dataset.id === String(id));
+        if (card) {
+          card.classList.add("passing");
+          card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      }
+      timeline.invalidate(); // clears the lit block on the waveform too when playback stops
+    };
+    for (const ev of ["timeupdate", "play", "pause", "seeked"]) CL.on(player.v, ev, paintPassing);
     CL.on($("aUnsel"), "click", () => store && store.select(null));
 
     // ---- cards: the play button plays (or pauses) just that segment, without opening it ----
@@ -347,9 +373,24 @@
     }
 
     // ---- actions ----
+    // Replay: once, or over and over while Loop is on (remembered in this browser).
+    const LOOP_KEY = "cinnamonLabel.loop";
+    const loopOn = () => {
+      try {
+        return localStorage.getItem(LOOP_KEY) === "1";
+      } catch (_) {
+        return false;
+      }
+    };
+    const setLoop = (on) => {
+      try {
+        localStorage.setItem(LOOP_KEY, on ? "1" : "0");
+      } catch (_) {}
+      player.setLoop(on); // applies to a replay already playing
+    };
     const play = () => {
       const g = sel();
-      if (g) player.playRange(g.start, g.end);
+      if (g) player.playRange(g.start, g.end, { loop: loopOn() });
     };
     CL.on($("aPlay"), "click", play);
     CL.on($("aSplit"), "click", async () => {
@@ -472,20 +513,22 @@
     const values = (g) => ({ ...((store && store.taskFields) || {}), ...((g && g.fields) || {}) });
     const segmentsHidden = () => !!(form && store && !CFG.isVisible({ when: form.segmentLabelsWhen }, store.taskFields || {}));
     const missingFor = (g) => (form ? CFG.missing(form.segment, values(g)) : []);
-    // Collapsed-card summary: the visible single-choice answers, and the transcript's first line.
+    // Collapsed-card summary: the visible choice answers (one tag each, the question as tooltip),
+    // and the transcript's first line.
     function summary(g) {
-      if (!form) return { sub: "", pv: "" };
+      if (!form) return { tags: [], pv: "" };
       const v = values(g);
       const parts = [];
       let pv = "";
       for (const it of form.segment) {
         if (!CFG.isVisible(it, v)) continue;
         const ans = [].concat(v[it.name] || []).filter(Boolean);
-        if (it.kind === "choices" && ans.length && !(it.multiple && it.options.length === 1)) parts.push(ans.join(", "));
-        if (it.kind === "choices" && it.multiple && it.options.length === 1 && ans.length) parts.unshift(it.options[0].label);
+        const q = CFG.labelFor(form.segment, it) || it.name;
+        if (it.kind === "choices" && ans.length && !(it.multiple && it.options.length === 1)) for (const a of ans) parts.push({ text: a, q });
+        if (it.kind === "choices" && it.multiple && it.options.length === 1 && ans.length) parts.unshift({ text: it.options[0].label, q });
         if (it.kind === "textarea" && !pv && (it.rows >= 3 || it.dir === "rtl") && ans.length) pv = ans.join(" ");
       }
-      return { sub: parts.join(" · "), pv };
+      return { tags: parts, pv };
     }
     function goNext() {
       const g = sel();
@@ -549,7 +592,7 @@
           ? new CL.FormView($("form"), {
               items: f.segment,
               onChange: (name, v, o) => store && store.selected && store.setField(store.selected, name, v, o),
-              extras: { onReplay: play, onNext: goNext, onBlur: () => store && store.flushTexts() },
+              extras: { onReplay: play, loop: { get: loopOn, set: setLoop }, onNext: goNext, onBlur: () => store && store.flushTexts() },
             })
           : null;
         api.render();
@@ -636,8 +679,20 @@
           c.pill.textContent = miss[i].length ? `${miss[i].length} still needed` : "✓ Complete";
           c.pill.title = miss[i].length ? "Still needed: " + miss[i].join(", ") : "Every required answer is given.";
           const sm = summary(x);
-          c.sub.textContent = sm.sub;
-          c.sub.hidden = !sm.sub;
+          const sig = sm.tags.map((x) => x.q + "=" + x.text).join("|");
+          if (c.sub.dataset.sig !== sig) {
+            c.sub.dataset.sig = sig;
+            c.sub.replaceChildren(
+              ...sm.tags.map((x) => {
+                const tag = document.createElement("span");
+                tag.className = "tag";
+                tag.textContent = x.text;
+                tag.title = x.q;
+                return tag;
+              })
+            );
+          }
+          c.sub.hidden = !sm.tags.length;
           c.pv.textContent = sm.pv || "No transcript yet";
           c.pv.classList.toggle("none", !sm.pv);
           c.pv.hidden = !form;

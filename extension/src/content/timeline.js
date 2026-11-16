@@ -22,6 +22,7 @@
     text: "#5d6573",
     segFill: "rgba(61,68,82,0.11)",
     segSelFill: "rgba(138,75,42,0.12)",
+    segPassFill: "rgba(226,170,60,0.24)", // the segment playing now, when none is selected (review)
     segNewFill: "rgba(138,75,42,0.18)",
     segEdge: "#7d8594",
     segTag: "#7d8594",
@@ -450,6 +451,13 @@
         ctx.fillRect(px, y0, 1, Math.max(1, y1 - y0));
       }
     }
+    // While playing with no segment selected: the segment under the playhead (lit softly, to follow
+    // along when reviewing). Null otherwise.
+    _passing(t) {
+      if (!this.store || this.store.selected || this.v.paused || this.marking) return null;
+      const g = this.segs.find((x) => x.start <= t && t < x.end);
+      return g ? g.id : null;
+    }
     // Pixel range of the selected segment on a lane drawn from t0 over span seconds, w pixels wide.
     _selRange(t0, span, w) {
       const g = this.store && this.store.selected ? this.segs.find((x) => x.id === this.store.selected) : null;
@@ -493,11 +501,12 @@
           }
           ctx.restore();
           const sel = this.store && this.store.selected;
+          const passing = this._passing(t);
           for (const g of this.segs) {
             const x0 = (g.start / d) * w;
             const x1 = (g.end / d) * w;
             const isSel = g.id === sel || g.id === "__new";
-            ctx.fillStyle = isSel ? C.segSelFill : C.segFill;
+            ctx.fillStyle = isSel ? C.segSelFill : g.id === passing ? C.segPassFill : C.segFill;
             ctx.fillRect(x0, top, Math.max(dpr, x1 - x0), bottom - top);
           }
           this._wave(ctx, 0, w, 3 * dpr, h - 9 * dpr, 0, d, playX, gain, this._selRange(0, d, w));
@@ -577,12 +586,13 @@
           ctx.restore();
           // segment blocks (behind the waveform)
           const sel = this.store && this.store.selected;
+          const passing = this._passing(t);
           const segs = this.segs;
           for (const g of segs) {
             const x0 = toX(g.start);
             const x1 = toX(g.end);
             if (x1 < 0 || x0 > w) continue;
-            ctx.fillStyle = g.id === sel ? C.segSelFill : g.id === "__new" ? C.segNewFill : C.segFill;
+            ctx.fillStyle = g.id === sel ? C.segSelFill : g.id === "__new" ? C.segNewFill : g.id === passing ? C.segPassFill : C.segFill;
             ctx.fillRect(x0, rulerH + dpr, x1 - x0, h - rulerH - dpr);
           }
           // waveform

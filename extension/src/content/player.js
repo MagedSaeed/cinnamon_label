@@ -75,10 +75,12 @@
     }
 
     // Play [a, b) and stop at b. Any manual pause or seek outside the range cancels the stop.
-    playRange(a, b) {
+    // Play [a, b] and stop at b; with loop, start again from a until paused (or setLoop(false)).
+    playRange(a, b, { loop = false } = {}) {
       const v = this.v;
       if (!v.currentSrc || !(b > a)) return;
       this._range = [a, b];
+      this._loop = !!loop;
       this.seekTo(a);
       v.preload = "auto";
       v.play().catch(() => {});
@@ -101,6 +103,11 @@
           return;
         }
         if (v.currentTime >= r[1]) {
+          if (this._loop) {
+            v.currentTime = r[0]; // again from the start (inside the range, so it isn't cancelled)
+            requestAnimationFrame(watch);
+            return;
+          }
           this._range = null;
           v.pause();
           v.currentTime = r[1];
@@ -109,6 +116,11 @@
         requestAnimationFrame(watch);
       };
       requestAnimationFrame(watch);
+    }
+
+    // Turn looping on or off for the range playing now (if any).
+    setLoop(on) {
+      this._loop = !!on;
     }
 
     setRate(r) {

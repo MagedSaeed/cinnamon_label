@@ -57,7 +57,11 @@
 .tx{display:block; width:100%; min-height:128px; padding:10px 12px; resize:vertical; color:var(--ink); background:#fff;
   border:1px solid var(--line); border-radius:8px; font-size:22px; line-height:1.85;
   font-family:"Noto Naskh Arabic","Amiri","Scheherazade New","Noto Sans Arabic","Segoe UI","Arial",serif}
-.tbar{display:flex; gap:8px; margin-top:8px}
+.tbar{display:flex; align-items:center; gap:8px; margin-top:8px}
+.withnext{display:flex; align-items:flex-start; gap:10px}
+.withnext > .chips{flex:1 1 auto; min-width:0}
+.nextbtn{margin-left:auto; flex:none}
+.tbar .loop{display:flex; align-items:center; gap:6px; margin-right:auto; padding-left:4px; font-size:13px; color:var(--ink); cursor:pointer}
 .unsup{color:var(--muted); font-size:12.5px; padding-top:5px}
 @media (prefers-reduced-motion:reduce){.sw, .sw::after{transition:none}}
 `;
@@ -132,6 +136,25 @@
         grp.appendChild(n.root);
       });
       this.nodes.push({ root: wrap, update: () => groups.forEach((g) => (g.hidden = [...g.children].every((c) => c.hidden))) });
+      // "Next segment" sits at the right of the last visible question, so it comes after every
+      // answer (or in the transcript card's bar if nothing follows the transcript).
+      if (this.extras.onNext) {
+        const next = el("button", "btn nextbtn");
+        next.type = "button";
+        next.innerHTML = `Next segment<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>`;
+        CL.on(next, "click", () => this.extras.onNext && this.extras.onNext());
+        this.nodes.push({
+          root: next,
+          update: () => {
+            const rows = [...wrap.querySelectorAll(".q, .tg, .tcard")].filter((r) => !r.hidden && !r.closest("[hidden]"));
+            const last = rows[rows.length - 1];
+            const slot = !last ? wrap : last.classList.contains("tcard") ? last.querySelector(".tbar") || last : last.querySelector(".ctl") || last;
+            if (next.parentElement !== slot) slot.appendChild(next);
+            wrap.querySelectorAll(".withnext").forEach((x) => x !== slot && x.classList.remove("withnext"));
+            slot.classList.add("withnext");
+          },
+        });
+      }
       if (notes.children.length > 1) {
         this.el.appendChild(notes);
         this.nodes.push({ root: notes, update: () => (notes.hidden = ![...notes.querySelectorAll(".help")].some((h) => !h.hidden)) });
@@ -253,12 +276,24 @@
         replay.type = "button";
         replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>Replay segment`;
         CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
-        const next = el("button", "btn");
-        next.type = "button";
-        next.innerHTML = `Next segment<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>`;
-        CL.on(next, "click", () => this.extras.onNext && this.extras.onNext());
         if (this.extras.onReplay) bar.append(replay);
-        if (this.extras.onNext) bar.append(next);
+        if (this.extras.onReplay && this.extras.loop) {
+          // Loop switch: on, Replay keeps repeating the segment until paused; off, it plays once.
+          const lp = this.extras.loop;
+          const wrap = el("label", "loop");
+          const sw = el("button", "sw");
+          sw.type = "button";
+          sw.setAttribute("role", "switch");
+          sw.setAttribute("aria-checked", String(!!lp.get()));
+          sw.title = "On: Replay segment repeats until you pause. Off: it plays once.";
+          CL.on(sw, "click", () => {
+            const on = sw.getAttribute("aria-checked") !== "true";
+            sw.setAttribute("aria-checked", String(on));
+            lp.set(on);
+          });
+          wrap.append(sw, el("span", null, "Loop"));
+          bar.append(wrap);
+        }
         if (bar.children.length) root.append(bar);
         return {
           root,
