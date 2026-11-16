@@ -16,9 +16,15 @@
 .grp:first-child{border-top:0; padding-top:0}
 .grp > .q, .grp > .tg{border-top:0; padding:5px 0}
 .grp > .tcard{margin:6px 0 2px}
-.q{display:grid; grid-template-columns:minmax(110px,150px) 1fr; column-gap:14px; align-items:start; padding:9px 0; border-top:1px solid var(--line)}
+.q{display:grid; grid-template-columns:minmax(130px,180px) 1fr; column-gap:14px; align-items:start; padding:9px 0; border-top:1px solid var(--line)}
 .rows > .q:first-child, .rows > .tg:first-child{border-top:0; padding-top:2px}
-.q.nested, .tg.nested{border-top:0; padding-top:3px; margin-left:calc(var(--d) * 14px); padding-left:12px; border-left:2px solid #ead7cb}
+/* Follow-ups: answers stay aligned with the rows above; only the label is indented, with a small
+   elbow connector showing which answer revealed it (a tree, not stacked rules). */
+.q.nested{border-top:0; padding-top:3px}
+.q.nested > .lab{position:relative; padding-left:calc((var(--d) + 1) * 16px)}
+.q.nested > .lab::before{content:""; position:absolute; left:calc(var(--d) * 16px + 3px); top:3px; width:9px; height:11px;
+  border-left:1.5px solid #cfa98f; border-bottom:1.5px solid #cfa98f; border-bottom-left-radius:4px}
+.tg.nested{border-top:0; padding-top:3px; padding-left:calc((var(--d) + 1) * 16px)}
 .lab{display:flex; align-items:center; gap:6px; min-height:28px; font-size:13px; font-weight:600; color:var(--ink); line-height:1.3}
 .lab .dot{width:6px; height:6px; border-radius:50%; background:var(--cinnamon); flex:none; visibility:hidden}
 .need > .lab .dot, .tcard.need .dot{visibility:visible}
