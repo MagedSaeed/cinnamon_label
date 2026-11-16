@@ -579,7 +579,7 @@
       setInterval(() => {
         if (!CL.alive()) return;
         try {
-          chrome.runtime.sendMessage({ type: "CL_DEV_TICK", dirty: storeDirty() }, (r) => {
+          chrome.runtime.sendMessage({ type: "CL_DEV_TICK", dirty: storeDirty() || !!(panel && panel.busy) }, (r) => {
             if (chrome.runtime.lastError) return;
             const host = document.getElementById("cinnamon-label-root");
             if (host) host.dataset.dev = JSON.stringify(r || null); // visible in DevTools; nothing reads it

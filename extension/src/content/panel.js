@@ -30,7 +30,17 @@
 .icon:not(:disabled):hover{border-color:#c9ced6}
 /* segment cards */
 .cards{display:flex; flex-direction:column; gap:8px}
-.card{border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden}
+.card{display:grid; grid-template-columns:auto minmax(0,1fr); border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden}
+.cbody{grid-column:1 / -1}
+/* play this segment (beside the header: a button can't contain another button) */
+.cplay{align-self:stretch; display:grid; place-items:start center; width:40px; padding:12px 0 0 8px; border:0; background:none; color:var(--muted)}
+.cplay span{display:grid; place-items:center; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--panel)}
+.cplay svg{width:12px; height:12px; fill:currentColor}
+.cplay:hover span{border-color:var(--cinnamon); color:var(--cinnamon)}
+.cplay.on span{background:var(--cinnamon); border-color:var(--cinnamon); color:#fff}
+.card.open .cplay{background:var(--cinnamon-soft); border-bottom:1px solid #ecdcd2}
+.cplay:hover + .ch{background:var(--surface)}
+.card.open .cplay:hover + .ch{background:var(--cinnamon-soft)}
 .card.open{border-color:#e2c3b0; box-shadow:0 2px 10px rgba(138,75,42,.07)}
 .ch{display:grid; grid-template-columns:auto 1fr auto auto; align-items:center; column-gap:12px; row-gap:3px; width:100%; padding:10px 12px;
   border:0; background:none; text-align:left; cursor:pointer; font-variant-numeric:tabular-nums}
@@ -105,6 +115,8 @@
     del: `<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`,
     x: `<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>`,
     chev: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
+    playSmall: `<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`,
+    pauseSmall: `<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>`,
     spark: `<svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>`,
   };
 
@@ -177,6 +189,7 @@
       <button class="icon" id="redo" title="Redo" aria-label="Redo">${I.redo}</button>`;
     const root = container.getRootNode();
     const $ = (id) => root.getElementById(id);
+    const linksEl = $("links"); // moved around (see render), so kept by reference
     const D = () => timeline.duration;
     const base = () => store.segments.map((g) => ({ id: g.id, start: g.start, end: g.end }));
     const sel = () => (store && store.selected ? store.byId(store.selected) : null);
@@ -231,6 +244,34 @@
       await store.apply(r.plan, { select: "created" });
     });
     CL.on($("aCancel"), "click", stopMarking);
+
+    // ---- cards: the play button plays (or pauses) just that segment, without opening it ----
+    const playingId = () => {
+      const r = player._range;
+      if (!r || player.v.paused) return null;
+      const g = store && store.segments.find((x) => Math.abs(x.start - r[0]) < 0.002 && Math.abs(x.end - r[1]) < 0.002);
+      return g ? g.id : null;
+    };
+    const paintPlay = () => {
+      const on = playingId();
+      for (const [id, c] of cards) {
+        const isOn = id === on;
+        c.play.classList.toggle("on", isOn);
+        c.play.firstChild.innerHTML = isOn ? I.pauseSmall : I.playSmall;
+        c.play.title = isOn ? "Pause" : "Play this segment";
+        c.play.setAttribute("aria-label", c.play.title);
+      }
+    };
+    for (const ev of ["play", "pause", "ended", "seeking"]) CL.on(player.v, ev, () => setTimeout(paintPlay, 0));
+    CL.on($("cards"), "click", (e) => {
+      const pb = e.target.closest(".cplay");
+      if (!pb) return;
+      const id = pb.parentElement.dataset.id;
+      const g = store && store.byId(id);
+      if (!g) return;
+      if (playingId() === id) player.v.pause();
+      else player.playRange(g.start, g.end);
+    });
 
     // ---- cards: click a header to open (or close) that segment ----
     CL.on($("cards"), "click", (e) => {
@@ -456,9 +497,9 @@
       rootEl.className = "card";
       rootEl.dataset.id = id;
       rootEl.setAttribute("role", "listitem");
-      rootEl.innerHTML = `<button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span></button><div class="cbody"></div>`;
+      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span></button><div class="cbody"></div>`;
       const q = (s) => rootEl.querySelector(s);
-      c = { root: rootEl, head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), sub: q(".sub"), pv: q(".pv"), body: q(".cbody") };
+      c = { root: rootEl, play: q(".cplay"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), sub: q(".sub"), pv: q(".pv"), body: q(".cbody") };
       cards.set(id, c);
       return c;
     }
@@ -477,7 +518,7 @@
       },
       setForm(f) {
         form = f;
-        const links = $("links");
+        const links = linksEl;
         links.textContent = "";
         for (const l of (f && f.links) || []) {
           const a = document.createElement("a");
@@ -516,6 +557,10 @@
       setBackup(b) {
         backup = b;
         api.showOffer(b ? b.offer : null);
+      },
+      // True while a presegmentation run is in progress (the dev auto-reload waits for it).
+      get busy() {
+        return presegBusy;
       },
       showOldExtNotice(on) {
         $("oldNote").hidden = !on;
@@ -641,11 +686,13 @@
         if (taskView) {
           taskView.render("task", values(null), { readOnly: !store || store.readOnly });
           // One tidy row: guide links on the left, the first whole-video switch on the right.
+          // The form can rebuild (e.g. while switching tasks), so the links element is kept by
+          // reference and re-attached; without a switch row it sits on its own at the top.
           const lead = $("taskForm").querySelector(".rows > .grp:first-child > .tg:first-child");
-          if (lead && !lead.classList.contains("lead")) {
+          if (lead) {
             lead.classList.add("lead");
-            lead.prepend($("links"));
-          }
+            if (linksEl.parentElement !== lead) lead.prepend(linksEl);
+          } else if (linksEl.parentElement !== $("whole")) $("whole").prepend(linksEl);
         }
         refreshHistory();
       },

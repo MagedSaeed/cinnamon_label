@@ -15,6 +15,7 @@
     accent: "#8a4b2a",
     buffered: "#c3c8d0",
     ruler: "#8c93a0",
+    rulerBg: "#f3f4f6",
     tick: "#d9dde3",
     hover: "rgba(29,33,41,0.35)",
     text: "#5d6573",
@@ -33,6 +34,7 @@
   };
   const STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
   const MIN_SPAN = 1;
+  const RULER_CSS = 22; // height of the time ruler (the scrub strip), CSS px
   const DEFAULT_SPAN = 15;
 
   function fitCanvas(cv) {
@@ -193,6 +195,13 @@
       this.dt.setPointerCapture(e.pointerId);
       const x = this._localX(e);
       const t = this._xToTime(e);
+      if (this._inRuler(e)) {
+        // The time ruler only moves the playhead (click to jump, drag to scrub).
+        this.drag = { kind: "scrub" };
+        this.player.seekTo(t);
+        this.invalidate();
+        return;
+      }
       const base = this.store ? this.store.segments.map((g) => ({ id: g.id, start: g.start, end: g.end })) : [];
       const edge = this.editable ? this._edgeAt(x) : null;
       if (edge) this.drag = { kind: "edge", id: edge.id, edge: edge.edge, base, x0: x };
@@ -202,6 +211,10 @@
         const sug = !inside && this.editable ? this._sugAt(t) : null;
         this.drag = inside ? { kind: "select", id: inside.id, x0: x } : { kind: "create", t0: this._snap(t, e), base, x0: x, sug };
       }
+    }
+    // The ruler strip along the top of the lane (scrub zone).
+    _inRuler(e) {
+      return e.clientY - this.dt.getBoundingClientRect().top < RULER_CSS;
     }
     get sugs() {
       return (this.store && this.store.suggestions) || [];
@@ -214,6 +227,16 @@
       this.hoverX = x;
       const S = globalThis.CLSeg;
       const d = this.drag;
+      if (d && d.kind === "scrub") {
+        this.player.seekTo(this._xToTime(e));
+        return this.invalidate();
+      }
+      if (!d && this._inRuler(e)) {
+        this.hoverEdge = null;
+        this.dt.style.cursor = "pointer";
+        this.dt.title = "Click or drag here to move the playhead";
+        return this.invalidate();
+      }
       if (!d) {
         this.hoverEdge = this.editable ? this._edgeAt(x) : null;
         const t = this._xToTime(e);
@@ -242,6 +265,7 @@
       const d = this.drag;
       this.drag = null;
       if (!d) return;
+      if (d.kind === "scrub") return this.invalidate();
       const t = this._xToTime(e);
       const store = this.store;
       if (!d.moved) {
@@ -491,7 +515,9 @@
         const ctx = this.dt.getContext("2d");
         ctx.fillStyle = C.bg;
         ctx.fillRect(0, 0, w, h);
-        const rulerH = 20 * dpr;
+        const rulerH = RULER_CSS * dpr;
+        ctx.fillStyle = C.rulerBg; // the ruler reads as a control strip: it moves the playhead
+        ctx.fillRect(0, 0, w, rulerH);
         if (d) {
           const t0 = this.viewStart;
           const span = this.span;
@@ -591,10 +617,15 @@
           if (playX >= -2 && playX <= w + 2) {
             ctx.fillStyle = C.accent;
             ctx.fillRect(Math.round(playX - dpr), 0, 2 * dpr, h);
+            // a grabbable handle in the ruler
+            const hw = 7 * dpr;
+            const hh = 12 * dpr;
             ctx.beginPath();
-            ctx.moveTo(playX - 5 * dpr, 0);
-            ctx.lineTo(playX + 5 * dpr, 0);
-            ctx.lineTo(playX, 6 * dpr);
+            ctx.moveTo(playX - hw, 0);
+            ctx.lineTo(playX + hw, 0);
+            ctx.lineTo(playX + hw, hh - 5 * dpr);
+            ctx.lineTo(playX, hh + 2 * dpr);
+            ctx.lineTo(playX - hw, hh - 5 * dpr);
             ctx.closePath();
             ctx.fill();
           }
