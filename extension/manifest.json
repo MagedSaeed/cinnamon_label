@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "Cinnamon Label",
+  "short_name": "Cinnamon Label",
+  "version": "0.1.0",
+  "description": "Cinnamon Label: smooth playback, waveform segment editing and a roomy transcript box for Label Studio. Never submits.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://annotation.dlnlp.ai/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Cinnamon Label",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://annotation.dlnlp.ai/*"
+      ],
+      "js": [
+        "src/page/bridge.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://annotation.dlnlp.ai/*"
+      ],
+      "js": [
+        "src/shared/util.js",
+        "src/content/core.js",
+        "src/content/cache.js",
+        "src/content/downloader.js",
+        "src/content/player.js",
+        "src/content/overlay.js",
+        "src/content/main.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon32.png"
+      ],
+      "matches": [
+        "https://annotation.dlnlp.ai/*"
+      ]
+    }
+  ]
+}

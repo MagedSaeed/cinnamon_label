@@ -1,0 +1,309 @@
+// The Cinnamon Label surface. It sits exactly over Label Studio's editor area (.lsf-main-view),
+// so Label Studio's top bar, side panels and bottom bar (with Submit) stay visible and untouched.
+// Label Studio's own DOM is never removed, so switching back to the native UI is instant.
+(() => {
+  const CL = globalThis.CL;
+  const U = CL.U;
+
+  const ICON_PLAY = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>`;
+  const ICON_PAUSE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>`;
+
+  const CSS = `
+:host{all:initial}
+*{box-sizing:border-box}
+.app{
+  --ink:#1d2129; --muted:#5d6573; --faint:#8c93a0; --line:#e3e6eb; --surface:#f5f6f8; --panel:#fff;
+  --cinnamon:#8a4b2a; --cinnamon-soft:#f3e9e3; --ok:#2f7d5b; --warn:#9a6212; --err:#b42318;
+  position:absolute; inset:0; display:grid; grid-template-rows:auto 1fr auto; background:var(--panel);
+  color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+  border-left:1px solid var(--line);
+}
+.bar{display:flex; align-items:center; gap:14px; padding:8px 14px; border-bottom:1px solid var(--line); min-height:44px}
+.brand{display:flex; align-items:center; gap:8px; font-weight:600; letter-spacing:.01em}
+.brand img{border-radius:5px; display:block}
+.task{color:var(--muted); font-variant-numeric:tabular-nums}
+.spacer{flex:1}
+.net{display:flex; align-items:center; gap:10px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:0}
+.net .txt{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.net .meter{width:120px; height:4px; background:var(--line); border-radius:2px; overflow:hidden; flex:none}
+.net .meter b{display:block; height:100%; width:0; background:var(--cinnamon); transition:width .25s linear}
+.net.ok .txt{color:var(--ok)} .net.warn .txt{color:var(--warn)} .net.err .txt{color:var(--err)}
+.net.ok .meter, .net.err .meter, .net.warn .meter{display:none}
+button{font:inherit; color:inherit; cursor:pointer}
+.ghost{background:none; border:1px solid var(--line); border-radius:6px; padding:4px 10px; color:var(--muted)}
+.ghost:hover{border-color:#c9ced6; color:var(--ink)}
+.link{background:none; border:none; padding:0; color:var(--cinnamon); text-decoration:underline; text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--cinnamon); outline-offset:2px}
+
+.body{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(320px,1fr); min-height:0}
+.stage{position:relative; background:var(--surface); min-height:0; min-width:0; display:flex; align-items:center; justify-content:center; padding:12px; overflow:hidden}
+/* Natural size: shrink to fit when larger than the stage, never enlarged. */
+video{display:block; width:auto; height:auto; max-width:100%; max-height:100%; background:#000; box-shadow:0 0 0 1px var(--line)}
+video:not([data-ready]){visibility:hidden}
+.stage .msg{position:absolute; inset:auto 0 16px; text-align:center; color:var(--muted); font-size:13px; pointer-events:none}
+.side{border-left:1px solid var(--line); background:var(--surface); padding:18px; overflow:auto}
+.side .empty{color:var(--faint); max-width:36ch}
+
+.transport{display:flex; align-items:center; gap:14px; padding:10px 14px; border-top:1px solid var(--line)}
+.play{width:36px; height:36px; border-radius:50%; border:none; background:var(--cinnamon); color:#fff; display:grid; place-items:center; flex:none}
+.play svg{width:18px; height:18px; fill:currentColor}
+.play:disabled{opacity:.4; cursor:default}
+.clock{font-variant-numeric:tabular-nums; color:var(--muted); white-space:nowrap}
+.clock b{color:var(--ink); font-weight:600}
+/* Seek bar, YouTube-style: played (cinnamon), buffered and playable without stopping (grey), not yet loaded (light).
+   --track is set from JS as layered gradients. */
+.seek{-webkit-appearance:none; appearance:none; flex:1; min-width:80px; height:18px; margin:0; background:transparent; cursor:pointer;
+  --track:linear-gradient(var(--line),var(--line))}
+.seek::-webkit-slider-runnable-track{height:5px; border-radius:3px; background:var(--track)}
+.seek::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:13px; height:13px; margin-top:-4px; border:none; border-radius:50%;
+  background:var(--cinnamon); box-shadow:0 0 0 2px #fff}
+.seek:focus-visible{outline:none}
+.seek:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--cinnamon)}
+.speed{display:flex; align-items:center; gap:6px; color:var(--muted)}
+.speed select{font:inherit; border:1px solid var(--line); border-radius:6px; padding:3px 6px; background:var(--panel); color:var(--ink)}
+@media (prefers-reduced-motion:reduce){ .net .meter b{transition:none} }
+`;
+
+  const PILL_CSS = `
+:host{all:initial}
+.pill{position:fixed; z-index:31; display:flex; align-items:center; gap:10px; max-width:520px;
+  font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:#1d2129; background:#fff;
+  border:1px solid #e3e6eb; border-radius:8px; padding:6px 6px 6px 12px; box-shadow:0 1px 3px rgba(29,33,41,.12)}
+.pill .msg{color:#b42318}
+.pill .msg:empty{display:none}
+button{font:inherit; cursor:pointer; border:none; border-radius:6px; padding:5px 10px; background:#8a4b2a; color:#fff; white-space:nowrap}
+button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
+`;
+
+  function el(html) {
+    const t = document.createElement("template");
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  }
+
+  CL.createOverlay = function createOverlay() {
+    // ---- main surface ----
+    const host = document.createElement("div");
+    host.id = "cinnamon-label-root";
+    host.style.cssText = "position:fixed;z-index:30;display:none;left:0;top:0;width:0;height:0";
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>${CSS}</style>`;
+    const app = el(`
+      <div class="app">
+        <header class="bar">
+          <div class="brand"><img alt="" width="20" height="20" src="${chrome.runtime.getURL("icons/icon32.png")}">Cinnamon Label</div>
+          <div class="task" id="task"></div>
+          <div class="spacer"></div>
+          <div class="net" id="net"><span class="txt" id="netTxt"></span><span class="meter"><b id="netBar"></b></span></div>
+          <button class="ghost" id="native" title="Show Label Studio's own editor. Your work is kept.">Switch to native UI</button>
+        </header>
+        <div class="body">
+          <section class="stage"><video id="video" playsinline></video><div class="msg" id="stageMsg"></div></section>
+          <aside class="side"><p class="empty">Segments and the transcript editor will appear here.</p></aside>
+        </div>
+        <footer class="transport">
+          <button class="play" id="play" aria-label="Play" disabled>${ICON_PLAY}</button>
+          <span class="clock"><b id="cur">0:00.0</b> / <span id="dur">–</span></span>
+          <input class="seek" id="seek" type="range" min="0" max="0" step="0.05" value="0" aria-label="Position">
+          <label class="speed">Speed
+            <select id="rate" aria-label="Playback speed">
+              <option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option>
+              <option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+            </select>
+          </label>
+        </footer>
+      </div>`);
+    root.appendChild(app);
+    const $ = (id) => root.getElementById(id);
+
+    // ---- "back to Cinnamon Label" pill shown in native mode ----
+    const pillHost = document.createElement("div");
+    pillHost.id = "cinnamon-label-pill";
+    pillHost.style.display = "none";
+    const proot = pillHost.attachShadow({ mode: "open" });
+    proot.innerHTML = `<style>${PILL_CSS}</style><div class="pill"><span class="msg" id="msg"></span><button id="back">Use Cinnamon Label</button></div>`;
+    const pill = proot.querySelector(".pill");
+
+    document.documentElement.append(host, pillHost);
+
+    // ---- positioning over .lsf-main-view ----
+    let anchor = null;
+    let visible = false;
+    let pillVisible = false;
+    const place = () => {
+      if (!anchor || !anchor.isConnected) return;
+      const r = anchor.getBoundingClientRect();
+      if (visible) Object.assign(host.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+      if (pillVisible) Object.assign(pill.style, { left: r.left + 16 + "px", top: r.bottom - 52 + "px" });
+    };
+    const ro = new ResizeObserver(() => place());
+    window.addEventListener("resize", place);
+    const placeTimer = setInterval(place, 500); // Label Studio panels can resize without a window resize
+
+    const api = {
+      video: $("video"),
+      get visible() {
+        return visible;
+      },
+      setAnchor(a) {
+        if (a === anchor) return place();
+        if (anchor) ro.unobserve(anchor);
+        anchor = a;
+        if (a) ro.observe(a);
+        place();
+      },
+      show(on) {
+        visible = !!on;
+        host.style.display = on ? "block" : "none";
+        place();
+      },
+      showPill(on, message = "") {
+        pillVisible = !!on;
+        proot.getElementById("msg").textContent = message;
+        pillHost.style.display = on ? "block" : "none";
+        place();
+      },
+      onNative(fn) {
+        CL.on($("native"), "click", fn);
+      },
+      onBack(fn) {
+        CL.on(proot.getElementById("back"), "click", fn);
+      },
+      setTask(id) {
+        $("task").textContent = id != null ? `Task ${id}` : "";
+      },
+      setStageMessage(t) {
+        $("stageMsg").textContent = t || "";
+      },
+      // s: { kind, loaded, total, rate, eta, message, reason }
+      setNet(s) {
+        const net = $("net");
+        const txt = $("netTxt");
+        net.className = "net";
+        let text = "";
+        let pct = 0;
+        switch (s.kind) {
+          case "checking":
+            text = "Checking for a saved copy…";
+            break;
+          case "downloading": {
+            const parts = [];
+            parts.push(s.total ? `Downloading ${U.fmtBytes(s.loaded)} of ${U.fmtBytes(s.total)}` : `Downloading ${U.fmtBytes(s.loaded)}`);
+            if (s.rate > 0) parts.push(`${(s.rate / 1e6).toFixed(1)} MB/s`);
+            const eta = U.fmtEta(s.eta);
+            if (eta) parts.push(eta);
+            text = parts.join(", ");
+            pct = s.total ? (100 * s.loaded) / s.total : 0;
+            break;
+          }
+          case "saving":
+            text = `Downloaded ${U.fmtBytes(s.total)}. Saving a copy…`;
+            pct = 100;
+            break;
+          case "saved":
+            net.classList.add("ok");
+            text = `Saved offline, ${U.fmtBytes(s.total)}`;
+            break;
+          case "cached":
+            net.classList.add("ok");
+            text = `Loaded from saved copy, ${U.fmtBytes(s.total)}`;
+            break;
+          case "memory":
+            net.classList.add("warn");
+            text = `Downloaded ${U.fmtBytes(s.total)}; not saved offline (${s.reason})`;
+            break;
+          case "error":
+            net.classList.add("err");
+            text = `Download stopped: ${s.message} Streaming from the server instead.`;
+            break;
+        }
+        txt.textContent = text;
+        txt.title = text;
+        $("netBar").style.width = pct.toFixed(1) + "%";
+        const old = net.querySelector(".link");
+        if (old) old.remove();
+        if (s.kind === "error" && s.retry) {
+          const b = el(`<button class="link">Try again</button>`);
+          CL.on(b, "click", s.retry);
+          net.appendChild(b);
+        }
+      },
+      bindPlayer(player) {
+        const v = player.v;
+        const play = $("play");
+        const seek = $("seek");
+        let dragging = false;
+        const paint = () => {
+          play.innerHTML = v.paused || v.ended ? ICON_PLAY : ICON_PAUSE;
+          play.setAttribute("aria-label", v.paused || v.ended ? "Play" : "Pause");
+        };
+        // Bar layers: played on top, then what the player has buffered, then the empty track.
+        const paintBar = () => {
+          const d = v.duration;
+          if (!Number.isFinite(d) || d <= 0) {
+            seek.style.setProperty("--track", "linear-gradient(var(--line),var(--line))");
+            return;
+          }
+          const pct = (t) => ((100 * Math.max(0, Math.min(d, t))) / d).toFixed(3) + "%";
+          const now = pct(dragging ? Number(seek.value) : v.currentTime || 0);
+          const played = `linear-gradient(to right, var(--cinnamon) ${now}, transparent ${now})`;
+          const stops = ["transparent 0%"];
+          const b = v.buffered;
+          for (let i = 0; i < b.length; i++) {
+            const s = pct(b.start(i));
+            const e = pct(b.end(i));
+            stops.push(`transparent ${s}`, `#b8bec8 ${s}`, `#b8bec8 ${e}`, `transparent ${e}`);
+          }
+          stops.push("transparent 100%");
+          const buffered = `linear-gradient(to right, ${stops.join(", ")})`;
+          seek.style.setProperty("--track", `${played}, ${buffered}, linear-gradient(var(--line),var(--line))`);
+        };
+        const tick = () => {
+          $("cur").textContent = U.fmtClock(v.currentTime || 0);
+          if (!dragging) seek.value = String(v.currentTime || 0);
+          paintBar();
+        };
+        CL.on(v, "progress", paintBar);
+        const loop = () => {
+          tick();
+          if (!v.paused) requestAnimationFrame(loop);
+        };
+        CL.on(v, "play", () => (paint(), requestAnimationFrame(loop)));
+        CL.on(v, "pause", paint);
+        CL.on(v, "ended", paint);
+        CL.on(v, "timeupdate", tick);
+        CL.on(v, "seeked", tick);
+        CL.on(v, "durationchange", () => {
+          const d = v.duration;
+          $("dur").textContent = U.fmtClock(d);
+          seek.max = Number.isFinite(d) ? String(d) : "0";
+          paintBar();
+        });
+        CL.on(v, "loadedmetadata", () => ((play.disabled = false), v.setAttribute("data-ready", "")));
+        CL.on(v, "emptied", () => ((play.disabled = true), v.removeAttribute("data-ready"), paint(), tick()));
+        CL.on(v, "waiting", () => api.setStageMessage("Buffering…"));
+        CL.on(v, "playing", () => api.setStageMessage(""));
+        CL.on(v, "canplay", () => api.setStageMessage(""));
+        CL.on(v, "click", () => player.toggle());
+        CL.on(play, "click", () => player.toggle());
+        CL.on(seek, "input", () => {
+          dragging = true;
+          player.seekTo(Number(seek.value));
+          paintBar();
+        });
+        CL.on(seek, "change", () => (dragging = false));
+        CL.on(v, "loadeddata", paintBar);
+        CL.on($("rate"), "change", (e) => player.setRate(Number(e.target.value)));
+        paint();
+      },
+      destroy() {
+        clearInterval(placeTimer);
+        ro.disconnect();
+        window.removeEventListener("resize", place);
+        host.remove();
+        pillHost.remove();
+      },
+    };
+    return api;
+  };
+})();
