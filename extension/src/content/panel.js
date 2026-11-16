@@ -1,4 +1,9 @@
-// Side panel: the list of segments and the selected segment's details and actions.
+// The segment UI, in two places:
+//  - the segment toolbar above the waveform: Add segment (mark start / mark end), the selected
+//    segment's start/end, play, split, merge, delete, undo/redo (where editing happens);
+//  - the side panel: whole-video fields, then one card per segment (an accordion): the collapsed
+//    card summarises the segment (time, status, answers, transcript preview); clicking its header
+//    opens the segment's form in place and closes the previously open one.
 // All edits go through the SegmentStore (which writes into Label Studio's annotation).
 (() => {
   const CL = globalThis.CL;
@@ -7,62 +12,82 @@
   CL.PANEL_CSS = `
 [hidden]{display:none !important}
 .panel{display:flex; flex-direction:column; gap:14px; min-height:0}
-.ph{display:flex; align-items:center; gap:10px}
+.ph{display:flex; align-items:baseline; gap:8px}
 .ph h2{margin:0; font-size:14px; font-weight:650}
 .ph .count{color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums}
-.ph .undo{display:flex; gap:4px; margin-left:auto}
-.icon{width:28px; height:28px; display:grid; place-items:center; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); padding:0}
-.icon svg{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.ph .sum{margin-left:auto; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+.icon{width:30px; height:30px; display:grid; place-items:center; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); padding:0; flex:none}
+.icon svg, .btn svg{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
 .icon:disabled{opacity:.35; cursor:default}
 .icon:not(:disabled):hover{border-color:#c9ced6}
-.list{list-style:none; margin:0; padding:0; max-height:34%; min-height:60px; overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel)}
-.list li + li{border-top:1px solid var(--line)}
-.row{display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:8px; width:100%; padding:7px 10px; border:0; background:none; text-align:left; font-variant-numeric:tabular-nums}
-.row:hover{background:var(--surface)}
-.row .n{display:inline-grid; place-items:center; min-width:22px; height:20px; padding:0 5px; border-radius:4px; background:#7d8594; color:#fff; font-size:11.5px; font-weight:650}
-.row .t{color:var(--ink)}
-.row .d{color:var(--muted); font-size:12.5px}
-li.sel .row{background:var(--cinnamon-soft)}
-li.sel .n{background:var(--cinnamon)}
-.empty{color:var(--muted); margin:0; max-width:46ch}
-.detail{display:flex; flex-direction:column; gap:12px; padding-top:2px}
-.detail h3{margin:0; font-size:14px; font-weight:650}
-.times{display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap}
-.times label{display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted)}
-.times input{width:108px; padding:5px 8px; font:inherit; font-size:14px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; font-variant-numeric:tabular-nums}
-.times input:focus{outline:none; border-color:var(--cinnamon); box-shadow:0 0 0 3px var(--cinnamon-soft)}
-.times .dur{padding-bottom:7px; color:var(--muted); font-variant-numeric:tabular-nums}
-.actions{display:flex; gap:8px; flex-wrap:wrap}
-.btn{display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); white-space:nowrap}
-.btn svg{width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+/* segment cards */
+.cards{display:flex; flex-direction:column; gap:8px}
+.card{border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden}
+.card.open{border-color:#e2c3b0; box-shadow:0 2px 10px rgba(138,75,42,.07)}
+.ch{display:grid; grid-template-columns:auto 1fr auto auto; align-items:center; column-gap:12px; row-gap:3px; width:100%; padding:10px 12px;
+  border:0; background:none; text-align:left; cursor:pointer; font-variant-numeric:tabular-nums}
+.ch:hover{background:var(--surface)}
+.card.open .ch{background:var(--cinnamon-soft); border-bottom:1px solid #ecdcd2}
+.ch .n{grid-row:1 / span 3; align-self:start; display:inline-grid; place-items:center; min-width:26px; height:26px; padding:0 6px; border-radius:6px;
+  background:#7d8594; color:#fff; font-size:12.5px; font-weight:650}
+.card.open .ch .n{background:var(--cinnamon)}
+.ch .t{font-weight:600; color:var(--ink)}
+.ch .t span{font-weight:400; color:var(--muted); margin-left:8px}
+.ch .chev{width:16px; height:16px; color:var(--muted); transition:transform .15s}
+.card.open .ch .chev{transform:rotate(180deg)}
+.ch .sub{grid-column:2 / -1; color:var(--muted); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:"Noto Naskh Arabic","Amiri","Scheherazade New","Noto Sans Arabic","Segoe UI",serif}
+.ch .pv.none{direction:ltr; text-align:left; font-family:inherit; font-size:12.5px; color:var(--faint); font-style:italic}
+.cb{padding:12px 14px 14px}
+.pill{padding:2px 10px; border-radius:999px; font-size:12px; white-space:nowrap}
+.pill.ok{background:#e7f3ed; color:var(--ok)}
+.pill.need{background:#fff; color:var(--cinnamon); border:1px solid #ead7cb}
+.empty{color:var(--muted); margin:0; max-width:52ch; line-height:1.5}
+.btn{display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); white-space:nowrap; font-size:13px}
 .btn:hover:not(:disabled){border-color:#c9ced6}
 .btn:disabled{opacity:.4; cursor:default}
 .btn.primary{background:var(--cinnamon); border-color:var(--cinnamon); color:#fff}
 .btn.danger{color:var(--err)}
 .btn.danger:hover:not(:disabled){border-color:#e8b4ae}
-.note{margin:0; font-size:12.5px; color:var(--muted)}
+.btn.marking{background:#fff; border-color:var(--cinnamon); color:var(--cinnamon)}
+.btn.marking::before{content:""; width:8px; height:8px; border-radius:50%; background:var(--err); animation:pulse 1s ease-in-out infinite alternate}
+@keyframes pulse{from{opacity:.35} to{opacity:1}}
+.note{margin:0 0 10px; font-size:12.5px; color:var(--muted)}
 .note.err{color:var(--err)}
+.note:empty{display:none}
 .restore{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border-radius:8px; background:var(--cinnamon-soft); border:1px solid #e6cfc2}
 .restore span{flex:1; min-width:200px}
-.whole{display:flex; flex-direction:column; gap:6px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--panel)}
-.whole .links{display:flex; gap:8px; flex-wrap:wrap}
+.whole{display:flex; flex-direction:column; gap:4px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel)}
+.whole .links{display:flex; gap:8px; flex-wrap:wrap; padding:2px 0}
 .whole .links a{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--line); border-radius:6px; color:var(--ink); text-decoration:none; font-size:13px}
 .whole .links a:hover{border-color:#c9ced6}
-.row .ok{color:var(--ok); font-size:12px}
-.row .miss{color:var(--cinnamon); font-size:12px; white-space:nowrap}
-.row{grid-template-columns:28px 1fr auto auto}
+.whole .tg.lead{border-top:0; padding:0; flex-wrap:wrap; gap:10px}
+.whole .tg.lead .links{margin-right:auto}
 .skipnote{margin:0; padding:10px 12px; border-radius:8px; background:var(--surface); border:1px solid var(--line); color:var(--muted)}
-.missing{margin:0; font-size:12.5px; color:var(--cinnamon)}
 .ro{margin:0; padding:8px 10px; border-radius:6px; background:var(--surface); color:var(--muted); border:1px solid var(--line)}
+/* segment toolbar (above the waveform) */
+.segbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0}
+.segbar .sep{width:1px; height:22px; background:var(--line); margin:0 4px}
+.segbar .who{font-weight:650; color:var(--ink); white-space:nowrap}
+.segbar .hint{color:var(--muted); font-size:12.5px}
+.tf{width:96px; padding:4px 7px; font:inherit; font-size:13px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; font-variant-numeric:tabular-nums}
+.tf:focus{outline:none; border-color:var(--cinnamon); box-shadow:0 0 0 3px var(--cinnamon-soft)}
+.segbar .dash{color:var(--muted)}
+.segbar .dur{color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.btn.marking::before{animation:none} .ch .chev{transition:none}}
 `;
 
   const I = {
+    add: `<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`,
     undo: `<svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>`,
     redo: `<svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>`,
     play: `<svg viewBox="0 0 24 24"><path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/></svg>`,
     split: `<svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M5 8h4M5 16h4M15 8h4M15 16h4"/></svg>`,
     merge: `<svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg>`,
     del: `<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`,
+    x: `<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>`,
+    chev: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
   };
 
   const fmtMs = (t) => {
@@ -72,91 +97,132 @@ li.sel .n{background:var(--cinnamon)}
     return `${m}:${s.toFixed(3).padStart(6, "0")}`;
   };
   const fmtDur = (d) => (d < 60 ? `${d.toFixed(d < 10 ? 2 : 1)} s` : U.fmtClock(d));
+  const EMPTY = "No segments yet. Press Add segment when someone starts speaking and Mark end when they stop, or drag across the waveform below.";
 
-  CL.createPanel = function createPanel(container, { player, timeline, textFields, onSelect }) {
+  // container: the side panel; bar: the segment toolbar element above the waveform.
+  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields }) {
     let store = null;
-    let form = null; // CLConfig.buildForm result
+    let form = null;
     let taskView = null;
     let segView = null;
+    let ui = null;
     let focusNext = false; // focus the transcript after the next selection made from the panel
-    let note = "";
-    let noteErr = false;
-    let history = { canUndo: false, canRedo: false };
+    let marking = null; // { start } while "Add segment" waits for "Mark end"
     const S = globalThis.CLSeg;
+    const CFG = globalThis.CLConfig;
+
     container.innerHTML = `
       <div class="panel">
         <section class="whole" id="whole" hidden>
           <div class="links" id="links"></div>
           <div id="taskForm"></div>
         </section>
-        <p class="skipnote" id="skipNote" hidden>This video is marked to skip as a whole, so segments are not part of the answer (Label Studio leaves them out). Untick it to work on segments.</p>
-        <div class="ph">
-          <h2>Segments <span class="count" id="segCount"></span></h2>
-          <div class="undo">
-            <button class="icon" id="undo" title="Undo (Label Studio's history)" aria-label="Undo">${I.undo}</button>
-            <button class="icon" id="redo" title="Redo" aria-label="Redo">${I.redo}</button>
-          </div>
-        </div>
+        <p class="skipnote" id="skipNote" hidden>This video is marked to skip as a whole, so segments are not part of the answer (Label Studio leaves them out). Turn the switch off to work on segments.</p>
         <div class="restore" id="restore" role="region" aria-label="Backup" hidden>
           <span id="rTxt"></span>
           <button class="btn primary" id="rDo">Restore</button>
           <button class="btn" id="rNo">Discard</button>
         </div>
-        <ol class="list" id="segList" aria-label="Segments"></ol>
-        <p class="empty" id="segEmpty">No segments yet. Drag across the waveform below to mark one.</p>
-        <section class="detail" id="detail" hidden>
-          <h3 id="dTitle"></h3>
-          <div class="times">
-            <label>Start<input id="dStart" spellcheck="false" autocomplete="off" aria-label="Segment start"></label>
-            <label>End<input id="dEnd" spellcheck="false" autocomplete="off" aria-label="Segment end"></label>
-            <span class="dur" id="dDur"></span>
-          </div>
-          <div class="actions">
-            <button class="btn primary" id="aPlay">${I.play}Play segment</button>
-            <button class="btn" id="aSplit" title="Split this segment where the playhead is">${I.split}Split at playhead</button>
-            <button class="btn" id="aMerge" title="Join this segment with the next one">${I.merge}Merge with next</button>
-            <button class="btn danger" id="aDel">${I.del}Delete</button>
-          </div>
-          <p class="note" id="dNote"></p>
-          <p class="missing" id="dMissing"></p>
-          <div id="form"></div>
-        </section>
+        <div class="ph"><h2>Segments <span class="count" id="segCount"></span></h2><span class="sum" id="segSum"></span></div>
+        <div class="cards" id="cards" role="list" aria-label="Segments"></div>
+        <p class="empty" id="segEmpty">${EMPTY}</p>
+        <div hidden id="holder"><div class="cb" id="detail"><p class="note" id="dNote"></p><div id="form"></div></div></div>
         <p class="ro" id="readOnly" hidden>This annotation is read-only. You can play and review it, but not edit it.</p>
       </div>`;
-    const $ = (id) => container.querySelector("#" + id);
+    bar.innerHTML = `
+      <button class="btn primary" id="aAdd" title="Start a segment at the playhead; press again to end it">${I.add}<span>Add segment</span></button>
+      <button class="icon" id="aCancel" title="Cancel (Esc)" aria-label="Cancel adding a segment" hidden>${I.x}</button>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="hint" id="bHint">Select a segment to edit it.</span>
+      <span class="who" id="bWho" hidden></span>
+      <input class="tf" id="dStart" spellcheck="false" autocomplete="off" aria-label="Segment start" title="Start (e.g. 12.5 or 0:12.500), Enter to apply" hidden>
+      <span class="dash" id="bDash" hidden>–</span>
+      <input class="tf" id="dEnd" spellcheck="false" autocomplete="off" aria-label="Segment end" title="End (e.g. 14 or 0:14.000), Enter to apply" hidden>
+      <span class="dur" id="dDur" hidden></span>
+      <button class="btn" id="aPlay" title="Play this segment" hidden>${I.play}Play</button>
+      <button class="btn" id="aSplit" title="Split this segment at the playhead" hidden>${I.split}Split</button>
+      <button class="btn" id="aMerge" title="Join this segment with the next one" hidden>${I.merge}Merge</button>
+      <button class="btn danger" id="aDel" title="Delete this segment (Undo brings it back)" hidden>${I.del}Delete</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="icon" id="undo" title="Undo" aria-label="Undo">${I.undo}</button>
+      <button class="icon" id="redo" title="Redo" aria-label="Redo">${I.redo}</button>`;
+    const root = container.getRootNode();
+    const $ = (id) => root.getElementById(id);
     const D = () => timeline.duration;
     const base = () => store.segments.map((g) => ({ id: g.id, start: g.start, end: g.end }));
     const sel = () => (store && store.selected ? store.byId(store.selected) : null);
+    const editable = () => !!(store && store.supported && !store.readOnly && !timeline.segmentsDisabled);
     const setNote = (t, err = false) => {
-      note = t || "";
-      noteErr = err;
-      $("dNote").textContent = note;
+      $("dNote").textContent = t || "";
       $("dNote").className = "note" + (err ? " err" : "");
+    };
+    let flashTimer;
+    let emptyText = EMPTY;
+    const flash = (t, err = false) => {
+      setNote(t, err);
+      $("segEmpty").textContent = t;
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => ($("segEmpty").textContent = emptyText), 5000);
+      if (ui && ui.toast) ui.toast(t);
     };
     const refreshHistory = () =>
       CL.page("history")
         .then((h) => {
-          history = h;
-          $("undo").disabled = !h.canUndo || !store || store.readOnly;
-          $("redo").disabled = !h.canRedo || !store || store.readOnly;
+          $("undo").disabled = !h.canUndo || !editable();
+          $("redo").disabled = !h.canRedo || !editable();
         })
         .catch(() => {});
 
-    // ---- list ----
-    CL.on($("segList"), "click", (e) => {
-      const li = e.target.closest("li[data-id]");
-      if (!li) return;
+    // ---- Add segment: mark start, then mark end ----
+    function stopMarking() {
+      marking = null;
+      timeline.marking = null;
+      timeline.invalidate();
+      api.render();
+    }
+    CL.on($("aAdd"), "click", async () => {
+      if (!editable()) return;
+      const t = player.v.currentTime || 0;
+      if (!marking) {
+        const inside = S.segmentAt(base(), t);
+        if (inside) {
+          const n = store.segments.findIndex((g) => g.id === inside.id) + 1;
+          return flash(`The playhead is inside segment ${n}. Move it to where the new speech starts.`, true);
+        }
+        marking = { start: t };
+        timeline.marking = marking;
+        timeline.invalidate();
+        setNote("");
+        return api.render();
+      }
+      const r = S.create(base(), marking.start, t, D());
+      if (!r || t <= marking.start + S.MIN_DUR) return flash("Play on to where the speech ends, then press Mark end.", true);
+      stopMarking();
+      focusNext = true;
+      await store.apply(r.plan, { select: "created" });
+    });
+    CL.on($("aCancel"), "click", stopMarking);
+
+    // ---- cards: click a header to open (or close) that segment ----
+    CL.on($("cards"), "click", (e) => {
+      const head = e.target.closest(".ch");
+      if (!head) return;
+      const id = head.parentElement.dataset.id;
+      if (store.selected === id) {
+        store.select(null); // close
+        return;
+      }
       focusNext = true; // put the cursor in the transcript once this segment's form is shown
-      store.select(li.dataset.id);
-      const g = store.byId(li.dataset.id);
+      setNote("");
+      store.select(id);
+      const g = store.byId(id);
       if (g) {
         player.seekTo(g.start);
         timeline.revealSegment(g);
       }
-      onSelect && onSelect(g);
     });
 
-    // ---- times ----
+    // ---- start / end fields ----
     for (const [id, which] of [["dStart", "start"], ["dEnd", "end"]]) {
       const input = $(id);
       const commit = async () => {
@@ -165,18 +231,13 @@ li.sel .n{background:var(--cinnamon)}
         const v = U.parseDuration(input.value);
         if (v == null) {
           input.value = fmtMs(g[which]);
-          setNote("Type a time like 12.5 or 0:12.500.", true);
-          return;
+          return flash("Type a time like 12.5 or 0:12.500.", true);
         }
-        const start = which === "start" ? v : g.start;
-        const end = which === "end" ? v : g.end;
-        const plan = S.setTimes(base(), g.id, start, end, D());
+        const plan = S.setTimes(base(), g.id, which === "start" ? v : g.start, which === "end" ? v : g.end, D());
         if (!plan) {
           input.value = fmtMs(g[which]);
-          setNote("That would make the segment empty or overlap another one.", true);
-          return;
+          return flash("That would make the segment empty or overlap another one.", true);
         }
-        setNote("");
         await store.apply(plan, { select: g.id });
       };
       CL.on(input, "change", commit);
@@ -193,46 +254,42 @@ li.sel .n{background:var(--cinnamon)}
     }
 
     // ---- actions ----
-    CL.on($("aPlay"), "click", () => {
+    const play = () => {
       const g = sel();
       if (g) player.playRange(g.start, g.end);
-    });
+    };
+    CL.on($("aPlay"), "click", play);
     CL.on($("aSplit"), "click", async () => {
       const g = sel();
       if (!g) return;
       const t = player.v.currentTime || 0;
-      if (t <= g.start || t >= g.end) return setNote("Move the playhead inside this segment first.", true);
+      if (t <= g.start || t >= g.end) return flash("Move the playhead inside this segment first.", true);
       const plan = S.split(base(), g.id, t);
-      if (!plan) return setNote("Too close to the segment's edge to split.", true);
-      // A split usually means the speaker changed: the new segment starts with no answers.
-      setNote("");
-      await store.apply(plan, { select: g.id });
-      setNote("Split. The new segment starts with no answers; this one keeps its answers and transcript.");
+      if (!plan) return flash("Too close to the segment's edge to split.", true);
+      await store.apply(plan, { select: g.id }); // the new segment starts with no answers
+      flash("Split. The new segment starts with no answers.");
     });
     CL.on($("aMerge"), "click", async () => {
       const g = sel();
       if (!g) return;
       const r = S.mergeNext(base(), g.id);
-      if (!r) return setNote("There is no next segment to merge with.", true);
+      if (!r) return flash("There is no next segment to merge with.", true);
       const next = store.byId(r.removedId);
-      // Join the transcripts (each text field) so nothing typed is lost.
       r.plan.fields = [];
       for (const name of textFields()) {
         const a = [].concat(g.fields[name] || []).join("").trim();
         const b = [].concat((next && next.fields[name]) || []).join("").trim();
         if (b) r.plan.fields.push({ id: g.id, name, value: a ? `${a} ${b}` : b });
       }
-      setNote("");
       await store.apply(r.plan, { select: g.id });
-      setNote("Merged. The transcripts were joined; this segment's choices were kept.");
+      flash("Merged. The transcripts were joined; this segment's answers were kept.");
     });
     CL.on($("aDel"), "click", async () => {
       const g = sel();
       if (!g) return;
       const n = store.segments.findIndex((x) => x.id === g.id) + 1;
       await store.apply(S.remove(base(), g.id));
-      setNote("");
-      flash(`Segment ${n} deleted. Use Undo to bring it back.`);
+      flash(`Segment ${n} deleted. Undo brings it back.`);
     });
     CL.on($("undo"), "click", async () => {
       await store.flush();
@@ -245,14 +302,6 @@ li.sel .n{background:var(--cinnamon)}
       await store.refresh();
       refreshHistory();
     });
-    let flashTimer;
-    let emptyText = "No segments yet. Drag across the waveform below to mark one.";
-    const flash = (t) => {
-      $("segEmpty").textContent = t;
-      clearTimeout(flashTimer);
-      flashTimer = setTimeout(() => ($("segEmpty").textContent = emptyText), 4000);
-      setNote(t);
-    };
 
     // ---- backup offer ----
     let backup = null;
@@ -263,7 +312,7 @@ li.sel .n{background:var(--cinnamon)}
       const r = await backup.restore();
       $("rDo").disabled = false;
       if (store) await store.refresh();
-      flash(r.message);
+      flash(r.message, !r.ok);
     });
     let discardArmed = 0;
     CL.on($("rNo"), "click", async () => {
@@ -279,16 +328,30 @@ li.sel .n{background:var(--cinnamon)}
       await backup.discard();
     });
 
-    // ---- forms (from the labeling config) ----
-    const CFG = globalThis.CLConfig;
+    // ---- forms ----
     const values = (g) => ({ ...((store && store.taskFields) || {}), ...((g && g.fields) || {}) });
     const segmentsHidden = () => !!(form && store && !CFG.isVisible({ when: form.segmentLabelsWhen }, store.taskFields || {}));
     const missingFor = (g) => (form ? CFG.missing(form.segment, values(g)) : []);
+    // Collapsed-card summary: the visible single-choice answers, and the transcript's first line.
+    function summary(g) {
+      if (!form) return { sub: "", pv: "" };
+      const v = values(g);
+      const parts = [];
+      let pv = "";
+      for (const it of form.segment) {
+        if (!CFG.isVisible(it, v)) continue;
+        const ans = [].concat(v[it.name] || []).filter(Boolean);
+        if (it.kind === "choices" && ans.length && !(it.multiple && it.options.length === 1)) parts.push(ans.join(", "));
+        if (it.kind === "choices" && it.multiple && it.options.length === 1 && ans.length) parts.unshift(it.options[0].label);
+        if (it.kind === "textarea" && !pv && (it.rows >= 3 || it.dir === "rtl") && ans.length) pv = ans.join(" ");
+      }
+      return { sub: parts.join(" · "), pv };
+    }
     function goNext() {
       const g = sel();
       if (!g) return;
-      const nx = globalThis.CLSeg.neighbour(store.segments, g.id, 1);
-      if (!nx) return setNote("This is the last segment.");
+      const nx = S.neighbour(store.segments, g.id, 1);
+      if (!nx) return flash("This is the last segment.");
       store.flushTexts();
       focusNext = true;
       store.select(nx.id);
@@ -296,10 +359,34 @@ li.sel .n{background:var(--cinnamon)}
       timeline.revealSegment(nx);
     }
 
+    // ---- cards: created once per segment id, updated in place (never rebuilt under the cursor) ----
+    const cards = new Map(); // id -> { root, n, t, pill, sub, pv, body }
+    function card(id) {
+      let c = cards.get(id);
+      if (c) return c;
+      const rootEl = document.createElement("article");
+      rootEl.className = "card";
+      rootEl.dataset.id = id;
+      rootEl.setAttribute("role", "listitem");
+      rootEl.innerHTML = `<button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span></button><div class="cbody"></div>`;
+      const q = (s) => rootEl.querySelector(s);
+      c = { root: rootEl, head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), sub: q(".sub"), pv: q(".pv"), body: q(".cbody") };
+      cards.set(id, c);
+      return c;
+    }
+    let lastOpen = null;
+
     // ---- render ----
-    let lastListSig = "";
-    let lastScrolledTo = null;
     const api = {
+      setUi(u) {
+        ui = u;
+      },
+      // Esc outside text fields: cancel "Add segment". Returns true if something was cancelled.
+      cancelMarking() {
+        if (!marking) return false;
+        stopMarking();
+        return true;
+      },
       setForm(f) {
         form = f;
         const links = $("links");
@@ -316,29 +403,32 @@ li.sel .n{background:var(--cinnamon)}
         const taskFields = (f && f.task.filter((i) => i.kind === "choices" || i.kind === "textarea")) || [];
         $("whole").hidden = !links.children.length && !taskFields.length;
         taskView = f && f.task.length ? new CL.FormView($("taskForm"), { items: f.task, onChange: (name, v, o) => store && store.setField(null, name, v, o) }) : null;
-        emptyText = ["No segments yet. Drag across the waveform below to mark one."].concat((f && f.segmentHelp) || []).join(" ");
+        emptyText = [EMPTY].concat((f && f.segmentHelp) || []).join(" ");
         $("segEmpty").textContent = emptyText;
         segView = f
           ? new CL.FormView($("form"), {
               items: f.segment,
               onChange: (name, v, o) => store && store.selected && store.setField(store.selected, name, v, o),
-              extras: {
-                onReplay: () => {
-                  const g = sel();
-                  if (g) player.playRange(g.start, g.end);
-                },
-                onNext: goNext,
-                onBlur: () => store && store.flushTexts(),
-              },
+              extras: { onReplay: play, onNext: goNext, onBlur: () => store && store.flushTexts() },
             })
           : null;
+        api.render();
+      },
+      setStore(s) {
+        store = s;
+        marking = null;
+        timeline.marking = null;
+        setNote("");
+        $("holder").appendChild($("detail"));
+        for (const c of cards.values()) c.root.remove();
+        cards.clear();
+        lastOpen = null;
         api.render();
       },
       setBackup(b) {
         backup = b;
         api.showOffer(b ? b.offer : null);
       },
-      // b: a stored backup ({ segments, savedAt }) to offer, or null.
       showOffer(b) {
         $("restore").hidden = !b;
         if (b) {
@@ -346,80 +436,100 @@ li.sel .n{background:var(--cinnamon)}
           $("rTxt").textContent = `This browser has unsubmitted work for this task from ${when(b.savedAt)}: ${n} segment${n === 1 ? "" : "s"}. Restore it?`;
         }
       },
-      setStore(s) {
-        store = s;
-        setNote("");
-        api.render();
-      },
       render() {
         const has = !!store && store.supported;
         const segs = has ? store.segments : [];
+        const canEdit = editable();
         $("segCount").textContent = segs.length ? `(${segs.length})` : "";
         $("readOnly").hidden = !(store && store.readOnly);
         $("segEmpty").hidden = segs.length > 0;
-        // list (rebuilt only when it changed, so scrolling and clicks aren't disturbed)
-        const miss = segs.map((g) => missingFor(g));
-        const sig = segs.map((g, i) => `${g.id}:${g.start}:${g.end}:${miss[i].join(",")}`).join("|") + "#" + (store && store.selected);
-        if (sig !== lastListSig) {
-          lastListSig = sig;
-          const ol = $("segList");
-          ol.textContent = "";
-          segs.forEach((g, i) => {
-            const li = document.createElement("li");
-            li.dataset.id = g.id;
-            if (store.selected === g.id) li.className = "sel";
-            li.innerHTML = `<button class="row"><span class="n">${i + 1}</span><span class="t">${U.fmtClock(g.start)} – ${U.fmtClock(g.end)}</span><span class="d">${fmtDur(g.end - g.start)}</span><span></span></button>`;
-            if (form) {
-              const st = li.querySelector(".row > span:last-child");
-              if (miss[i].length) {
-                st.className = "miss";
-                st.textContent = `⚠ ${miss[i].length}`;
-                st.title = "Missing: " + miss[i].join(", ");
-              } else {
-                st.className = "ok";
-                st.textContent = "✓";
-                st.title = "Complete";
-              }
-            }
-            ol.appendChild(li);
-          });
-          ol.hidden = !segs.length;
-          // Bring the selected row into view only when the selection changed (not on every update,
-          // which would yank the panel while typing below).
-          const cur = ol.querySelector("li.sel");
-          if (cur && store.selected !== lastScrolledTo) cur.scrollIntoView({ block: "nearest" });
-          lastScrolledTo = store.selected;
-        }
-        // detail
-        const g = sel();
-        $("detail").hidden = !g;
-        if (g) {
-          const i = segs.findIndex((x) => x.id === g.id);
-          $("dTitle").textContent = `Segment ${i + 1} of ${segs.length}`;
-          const root = container.getRootNode();
-          if (root.activeElement !== $("dStart")) $("dStart").value = fmtMs(g.start);
-          if (root.activeElement !== $("dEnd")) $("dEnd").value = fmtMs(g.end);
-          $("dDur").textContent = fmtDur(g.end - g.start);
-          const ro = store.readOnly;
-          for (const id of ["dStart", "dEnd"]) $(id).disabled = ro;
-          for (const id of ["aSplit", "aMerge", "aDel"]) $(id).disabled = ro;
-          $("aMerge").disabled = ro || i === segs.length - 1;
-          const m = missingFor(g);
-          $("dMissing").textContent = form && m.length ? "Still needed: " + m.join(", ") : "";
-          if (segView) segView.render(g.id, values(g), { readOnly: ro });
-          if (focusNext) {
-            focusNext = false;
-            const tx = segView && segView.firstBigText();
-            if (tx && !ro) tx.focus({ preventScroll: false });
-          }
-        }
-        if (taskView) taskView.render("task", values(null), { readOnly: !store || store.readOnly });
         const hiddenSegs = segmentsHidden();
         $("skipNote").hidden = !hiddenSegs;
         timeline.segmentsDisabled = hiddenSegs;
+        const g = sel();
+
+        // cards, in time order; open = the selected segment
+        const list = $("cards");
+        const miss = segs.map((x) => missingFor(x));
+        $("segSum").textContent = form && segs.length ? `${miss.filter((m) => !m.length).length} of ${segs.length} complete` : "";
+        const live = new Set();
+        segs.forEach((x, i) => {
+          const c = card(x.id);
+          live.add(x.id);
+          if (list.children[i] !== c.root) list.insertBefore(c.root, list.children[i] || null);
+          c.n.textContent = String(i + 1);
+          c.t.innerHTML = "";
+          c.t.append(`${U.fmtClock(x.start)} – ${U.fmtClock(x.end)}`);
+          const d = document.createElement("span");
+          d.textContent = fmtDur(x.end - x.start);
+          c.t.append(d);
+          c.pill.hidden = !form;
+          c.pill.className = "pill " + (miss[i].length ? "need" : "ok");
+          c.pill.textContent = miss[i].length ? `${miss[i].length} still needed` : "✓ Complete";
+          c.pill.title = miss[i].length ? "Still needed: " + miss[i].join(", ") : "Every required answer is given.";
+          const sm = summary(x);
+          c.sub.textContent = sm.sub;
+          c.sub.hidden = !sm.sub;
+          c.pv.textContent = sm.pv || "No transcript yet";
+          c.pv.classList.toggle("none", !sm.pv);
+          c.pv.hidden = !form;
+          const open = !!g && g.id === x.id;
+          c.root.classList.toggle("open", open);
+          c.head.setAttribute("aria-expanded", String(open));
+        });
+        for (const [id, c] of cards) {
+          if (live.has(id)) continue;
+          if (c.body.contains($("detail"))) $("holder").appendChild($("detail"));
+          c.root.remove();
+          cards.delete(id);
+        }
+
+        // the open card holds the form
+        if (g) {
+          const c = cards.get(g.id);
+          if (c && $("detail").parentElement !== c.body) c.body.appendChild($("detail"));
+          if (segView) segView.render(g.id, values(g), { readOnly: !canEdit });
+          if (c && lastOpen !== g.id) c.root.scrollIntoView({ block: "nearest" });
+          if (focusNext) {
+            focusNext = false;
+            const tx = segView && segView.firstBigText();
+            if (tx && canEdit) tx.focus({ preventScroll: true });
+          }
+        } else if ($("detail").parentElement !== $("holder")) $("holder").appendChild($("detail"));
+        lastOpen = g ? g.id : null;
+
+        // toolbar
+        const i = g ? segs.findIndex((x) => x.id === g.id) : -1;
+        $("aAdd").disabled = !canEdit;
+        $("aAdd").classList.toggle("marking", !!marking);
+        $("aAdd").classList.toggle("primary", !marking);
+        $("aAdd").querySelector("span").textContent = marking ? "Mark end" : "Add segment";
+        $("aAdd").title = marking ? `Started at ${U.fmtClock(marking.start)}. Press where the speech ends.` : "Start a segment at the playhead; press again to end it";
+        $("aCancel").hidden = !marking;
+        for (const id of ["bWho", "dStart", "bDash", "dEnd", "dDur", "aPlay", "aSplit", "aMerge", "aDel"]) $(id).hidden = !g || !!marking;
+        $("bHint").hidden = !!g && !marking;
+        $("bHint").textContent = marking ? "Let it play, then press Mark end where the speech stops." : canEdit ? "Select a segment to edit it." : "";
+        if (g) {
+          $("bWho").textContent = `Segment ${i + 1}`;
+          if (root.activeElement !== $("dStart")) $("dStart").value = fmtMs(g.start);
+          if (root.activeElement !== $("dEnd")) $("dEnd").value = fmtMs(g.end);
+          $("dDur").textContent = fmtDur(g.end - g.start);
+          for (const id of ["dStart", "dEnd"]) $(id).disabled = !canEdit;
+          for (const id of ["aSplit", "aDel"]) $(id).disabled = !canEdit;
+          $("aMerge").disabled = !canEdit || i === segs.length - 1;
+        }
+
+        if (taskView) {
+          taskView.render("task", values(null), { readOnly: !store || store.readOnly });
+          // One tidy row: guide links on the left, the first whole-video switch on the right.
+          const lead = $("taskForm").querySelector(".rows > .grp:first-child > .tg:first-child");
+          if (lead && !lead.classList.contains("lead")) {
+            lead.classList.add("lead");
+            lead.prepend($("links"));
+          }
+        }
         refreshHistory();
       },
-      form: () => $("form"),
     };
     return api;
   };

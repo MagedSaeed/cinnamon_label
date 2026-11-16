@@ -14,8 +14,10 @@
     played: "#3d4452",
     center: "#d9dde3",
     accent: "#8a4b2a",
-    accentFill: "rgba(138,75,42,0.05)",
-    accentLine: "rgba(138,75,42,0.45)",
+    accentFill: "rgba(138,75,42,0.08)",
+    accentLine: "#8a4b2a",
+    lensFill: "rgba(138,75,42,0.13)",
+    lensLine: "rgba(138,75,42,0.85)",
     buffered: "#c3c8d0",
     ruler: "#8c93a0",
     tick: "#d9dde3",
@@ -44,8 +46,9 @@
   }
 
   CL.Timeline = class Timeline {
-    constructor({ overview, detail, player, onView }) {
+    constructor({ overview, connector, detail, player, onView }) {
       this.ov = overview;
+      this.cn = connector || null;
       this.dt = detail;
       this.player = player;
       this.v = player.v;
@@ -152,7 +155,14 @@
       this.invalidate();
     }
     get segs() {
-      return this.preview || (this.store ? this.store.segments : []);
+      const list = this.preview || (this.store ? this.store.segments : []);
+      // "Add segment" in progress: show the segment growing from its start to the playhead.
+      const m = this.marking;
+      if (!m || this.preview) return list;
+      const t = this.v.currentTime || 0;
+      const a = Math.min(m.start, t);
+      const b = Math.max(m.start, t);
+      return b - a > 0.01 ? list.concat({ id: "__new", start: a, end: b }) : list;
     }
     get editable() {
       return !!(this.store && this.store.supported && !this.store.readOnly && !this.segmentsDisabled);
@@ -328,7 +338,7 @@
         CL.fail(e);
         return;
       }
-      if (!this.v.paused) this.invalidate(); // keep animating while playing
+      if (!this.v.paused || this.marking) this.invalidate(); // keep animating while playing / marking
     }
 
     // min/max of the signal over [t0, t1)
@@ -415,13 +425,49 @@
           const vx = (this.viewStart / d) * w;
           const vw = Math.max(2, (this.span / d) * w);
           ctx.fillStyle = C.accentFill;
-          ctx.fillRect(vx, 0, vw, h - 4 * dpr);
+          ctx.fillRect(vx, 0, vw, h);
+          // a solid 2 px frame, open at the bottom where the lens connector continues it
           ctx.strokeStyle = C.accentLine;
-          ctx.lineWidth = dpr;
-          ctx.strokeRect(vx + dpr / 2, dpr / 2, vw - dpr, h - 4 * dpr - dpr);
+          ctx.lineWidth = 2 * dpr;
+          const inset = dpr;
+          ctx.beginPath();
+          ctx.moveTo(vx + inset, h);
+          ctx.lineTo(vx + inset, inset);
+          ctx.lineTo(vx + vw - inset, inset);
+          ctx.lineTo(vx + vw - inset, h);
+          ctx.stroke();
           // playhead
           ctx.fillStyle = C.accent;
           ctx.fillRect(Math.round(playX - dpr), 0, 2 * dpr, h);
+        }
+      }
+
+      // ---- connector: the overview's box opens up into the detail lane below (a zoom lens) ----
+      if (this.cn) {
+        const { w, h } = fitCanvas(this.cn);
+        const ctx = this.cn.getContext("2d");
+        ctx.clearRect(0, 0, w, h);
+        if (d) {
+          const ow = this.ov.clientWidth;
+          const sx = w / Math.max(1, ow); // same width as the lanes; guard anyway
+          const x0 = (this.viewStart / d) * ow * sx;
+          const x1 = ((this.viewStart + this.span) / d) * ow * sx;
+          ctx.beginPath();
+          ctx.moveTo(x0, 0);
+          ctx.lineTo(x1, 0);
+          ctx.lineTo(w, h);
+          ctx.lineTo(0, h);
+          ctx.closePath();
+          ctx.fillStyle = C.lensFill;
+          ctx.fill();
+          ctx.strokeStyle = C.lensLine;
+          ctx.lineWidth = 2 * Math.max(1, window.devicePixelRatio || 1);
+          ctx.beginPath();
+          ctx.moveTo(x0, 0);
+          ctx.lineTo(0.5, h);
+          ctx.moveTo(x1, 0);
+          ctx.lineTo(w - 0.5, h);
+          ctx.stroke();
         }
       }
 

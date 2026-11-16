@@ -1,44 +1,79 @@
-// Renders a form described by shared/config.js (whole-task or per-segment fields) and reports
-// answers back through onChange. The DOM is built once per form key (task, or a segment id) and then
-// only updated, so a field being typed in is never replaced under the cursor.
+// Renders a form described by shared/config.js, arranged by CLConfig.layout():
+//  - questions as aligned rows (label column | answers), headers become the labels;
+//  - follow-up questions indented under the answer that reveals them;
+//  - help text tucked behind an "i" next to its question;
+//  - single on/off options as switches; the large text field (transcript) as its own card.
+// The DOM is built once per form key (task, or a segment id) and then only updated, so a field
+// being typed in is never replaced under the cursor.
 (() => {
   const CL = globalThis.CL;
   const CFG = globalThis.CLConfig;
 
   CL.FORM_CSS = `
-.form{display:flex; flex-direction:column; gap:4px}
-.form .fh{margin:12px 0 4px; font-size:13px; font-weight:650; color:var(--ink); display:flex; align-items:center; gap:6px}
-.form .fh:first-child{margin-top:0}
-.form .fh.need::after{content:""; width:6px; height:6px; border-radius:50%; background:var(--cinnamon)}
-.form .ft{margin:2px 0 6px; font-size:12.5px; color:var(--muted); max-width:70ch}
-.chips{display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 6px}
-.chip{padding:5px 11px; border:1px solid var(--line); border-radius:999px; background:var(--panel); color:var(--ink); font-size:13px; line-height:1.3}
-.chip:hover{border-color:#c9ced6}
+.rows{display:flex; flex-direction:column}
+/* a group = a top-level question with its follow-ups; rules only between groups */
+.grp{display:flex; flex-direction:column; padding:6px 0; border-top:1px solid var(--line)}
+.grp:first-child{border-top:0; padding-top:0}
+.grp > .q, .grp > .tg{border-top:0; padding:5px 0}
+.grp > .tcard{margin:6px 0 2px}
+.q{display:grid; grid-template-columns:minmax(110px,150px) 1fr; column-gap:14px; align-items:start; padding:9px 0; border-top:1px solid var(--line)}
+.rows > .q:first-child, .rows > .tg:first-child{border-top:0; padding-top:2px}
+.q.nested, .tg.nested{border-top:0; padding-top:3px; margin-left:calc(var(--d) * 14px); padding-left:12px; border-left:2px solid #ead7cb}
+.lab{display:flex; align-items:center; gap:6px; min-height:28px; font-size:13px; font-weight:600; color:var(--ink); line-height:1.3}
+.lab .dot{width:6px; height:6px; border-radius:50%; background:var(--cinnamon); flex:none; visibility:hidden}
+.need > .lab .dot, .tcard.need .dot{visibility:visible}
+.info{width:17px; height:17px; padding:0; display:inline-grid; place-items:center; border:1px solid currentColor; border-radius:50%; background:none;
+  color:var(--faint); font:italic 600 10px/1 Georgia,"Times New Roman",serif; flex:none}
+.info:hover, .info[aria-expanded="true"]{color:var(--cinnamon)}
+.ctl{min-width:0}
+.help{margin:0; padding:8px 10px; border-radius:6px; background:var(--surface); color:var(--muted); font-size:12.5px; line-height:1.5}
+/* notes: help texts from the config, always visible, at the end of the form */
+.notes{display:flex; flex-direction:column; gap:8px; margin-top:12px}
+.notes h5{margin:0; font-size:13px; font-weight:650; color:var(--ink)}
+.notes .help{padding:10px 14px; border-left:4px solid var(--cinnamon); border-radius:0 8px 8px 0; color:var(--ink); background:#fbf3ee;
+  font-size:14px; line-height:1.65; transition:background .3s}
+.notes .help.flash{background:#f3dccd}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chip{padding:4px 11px; border:1px solid var(--line); border-radius:999px; background:var(--panel); color:var(--ink); font-size:13px; line-height:1.35}
+.chip:hover:not(:disabled){border-color:#c9ced6}
 .chip[aria-checked="true"], .chip[aria-pressed="true"]{background:var(--cinnamon); border-color:var(--cinnamon); color:#fff}
-.chips.need .chip{border-color:#e2c3b0}
-.fi{width:100%; padding:6px 9px; font:inherit; font-size:14px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; resize:vertical}
+.fi{width:100%; padding:5px 9px; font:inherit; font-size:14px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; resize:vertical}
 .fi:focus, .tx:focus{outline:none; border-color:var(--cinnamon); box-shadow:0 0 0 3px var(--cinnamon-soft)}
-.fi.need{border-color:#e2c3b0}
-.txwrap{display:flex; flex-direction:column; gap:6px; margin:2px 0 6px}
-.tx{width:100%; min-height:132px; padding:12px 14px; resize:vertical; color:var(--ink); background:var(--panel);
+/* switch rows */
+.tg{display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--line)}
+.sw{position:relative; width:32px; height:18px; flex:none; border:0; padding:0; border-radius:999px; background:#d5d9e0; transition:background .15s}
+.sw::after{content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .15s}
+.sw[aria-checked="true"]{background:var(--cinnamon)}
+.sw[aria-checked="true"]::after{transform:translateX(14px)}
+.tg .tl{font-size:13px; font-weight:600; color:var(--ink); cursor:pointer}
+/* transcript card */
+.tcard{margin:10px 0 4px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--panel)}
+.thead{display:flex; align-items:center; gap:8px; margin-bottom:8px}
+.thead .lab{min-height:0}
+.thead .count{margin-left:auto; color:var(--faint); font-size:12px; font-weight:400; font-variant-numeric:tabular-nums}
+.tx{display:block; width:100%; min-height:128px; padding:10px 12px; resize:vertical; color:var(--ink); background:#fff;
   border:1px solid var(--line); border-radius:8px; font-size:22px; line-height:1.85;
   font-family:"Noto Naskh Arabic","Amiri","Scheherazade New","Noto Sans Arabic","Segoe UI","Arial",serif}
-.tx.need{border-color:#e2c3b0}
-.txbar{display:flex; gap:8px; align-items:center}
-.txbar .sp{flex:1}
-.txbar .count{color:var(--faint); font-size:12px; font-variant-numeric:tabular-nums}
-.unsup{margin:2px 0 6px; padding:6px 9px; border-radius:6px; background:var(--surface); color:var(--muted); font-size:12.5px}
+.tbar{display:flex; gap:8px; margin-top:8px}
+.unsup{color:var(--muted); font-size:12.5px; padding-top:5px}
+@media (prefers-reduced-motion:reduce){.sw, .sw::after{transition:none}}
 `;
 
-  const isBig = (it) => it.kind === "textarea" && (it.rows >= 3 || (it.dir === "rtl" && it.rows >= 2));
   const list = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]);
   const textValue = (v) => list(v).join("");
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
 
   CL.FormView = class FormView {
-    // items: from CLConfig.buildForm; onChange(name, value, { text }); extras: { onReplay, onNext } for the transcript bar
+    // items: from CLConfig.buildForm; onChange(name, value, { text }); extras: { onReplay, onNext, onBlur }
     constructor(container, { items, onChange, extras = {} }) {
       this.el = container;
       this.items = items;
+      this.rows = CFG.layout(items);
       this.onChange = onChange;
       this.extras = extras;
       this.key = null;
@@ -53,7 +88,7 @@
       for (const n of this.nodes) n.update(values);
     }
 
-    // The first visible text field (for focusing the transcript).
+    // The visible transcript field (for focusing).
     firstBigText() {
       const n = this.nodes.find((x) => x.big && !x.root.hidden);
       return n ? n.input : null;
@@ -63,44 +98,195 @@
       this.key = key;
       this.readOnly = readOnly;
       this.el.textContent = "";
-      const form = document.createElement("div");
-      form.className = "form";
-      this.el.appendChild(form);
-      this.nodes = this.items.map((it) => this._node(it, readOnly));
-      for (const n of this.nodes) form.appendChild(n.root);
+      const wrap = el("div", "rows");
+      this.el.appendChild(wrap);
+      // Help texts are shown at the end, always visible while their question is.
+      const notes = el("section", "notes");
+      notes.append(el("h5", null, "Notes"));
+      this._notes = notes;
+      this.nodes = this.rows.map((r) => this._row(r, readOnly));
+      // Group each top-level row with the follow-ups below it.
+      // The transcript card is a group of its own; a group that starts with a follow-up question
+      // shows it un-indented (its parent is in an earlier group) and indents relative to it.
+      const groups = [];
+      let grp = null;
+      let base = 0;
+      let afterCard = false;
+      this.nodes.forEach((n, i) => {
+        const r = this.rows[i];
+        const depth = r.depth || 0;
+        if (!grp || afterCard || depth === 0 || r.type === "transcript") {
+          grp = el("div", "grp");
+          wrap.appendChild(grp);
+          groups.push(grp);
+          base = depth;
+        }
+        afterCard = r.type === "transcript";
+        const rel = depth - base;
+        n.root.classList.toggle("nested", rel > 0);
+        if (rel > 0) n.root.style.setProperty("--d", String(rel - 1));
+        else n.root.style.removeProperty("--d");
+        grp.appendChild(n.root);
+      });
+      this.nodes.push({ root: wrap, update: () => groups.forEach((g) => (g.hidden = [...g.children].every((c) => c.hidden))) });
+      if (notes.children.length > 1) {
+        this.el.appendChild(notes);
+        this.nodes.push({ root: notes, update: () => (notes.hidden = ![...notes.querySelectorAll(".help")].some((h) => !h.hidden)) });
+      }
     }
 
-    _node(it, ro) {
-      const items = this.items;
-      const vis = (values) => CFG.isVisible(it, values);
-      const need = (values) => vis(values) && CFG.isRequired(it) && !CFG.isAnswered(it, values);
+    _set(name, value, text) {
+      this.onChange(name, value, { text });
+    }
 
-      if (it.kind === "header" || it.kind === "text") {
-        const root = document.createElement(it.kind === "header" ? "h4" : "p");
-        root.className = it.kind === "header" ? "fh" : "ft";
-        root.textContent = it.text;
-        // A header gets a dot while the field right below it still needs an answer.
-        const next = it.kind === "header" ? items.slice(items.indexOf(it) + 1).find((x) => x.kind !== "text") : null;
-        const field = next && (next.kind === "choices" || next.kind === "textarea") ? next : null;
+    _row(row, ro) {
+      const node = this._rowInner(row, ro);
+      if (row._help) {
+        const upd = node.update;
+        node.update = (values) => {
+          upd(values);
+          row._help.hidden = node.root.hidden;
+        };
+      }
+      return node;
+    }
+
+    _rowInner(row, ro) {
+      const it = row.item;
+      const vis = (values) => CFG.isVisible(it || row, values);
+      const need = (values) => !!it && vis(values) && CFG.isRequired(it) && !CFG.isAnswered(it, values);
+
+      if (row.type === "title" || row.type === "note") {
+        const root = el("p", row.type === "title" ? "lab" : "help", row.text);
+        if (row.type === "note") root.style.gridColumn = "auto";
+        return { root, update: (values) => (root.hidden = !vis(values)) };
+      }
+
+      // Label with required dot and optional help toggle.
+      const makeLabel = (cls = "lab") => {
+        const lab = el("div", cls);
+        lab.append(el("span", null, row.label));
+        lab.append(el("span", "dot"));
+        lab.lastChild.title = "Needs an answer";
+        return lab;
+      };
+      // The help text goes to the Notes block (always visible while the question is); the "i" next to
+      // the question jumps to it.
+      const addHelp = (root, lab) => {
+        if (!row.help.length) return;
+        const help = el("p", "help", row.help.join(" "));
+        this._notes.append(help);
+        this._helpFor = this._helpFor || [];
+        this._helpFor.push([help, row]);
+        const btn = el("button", "info", "i");
+        btn.type = "button";
+        btn.title = "See the note below";
+        btn.setAttribute("aria-label", `Note about ${row.label}`);
+        CL.on(btn, "click", () => {
+          help.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          help.classList.add("flash");
+          setTimeout(() => help.classList.remove("flash"), 1200);
+        });
+        lab.append(btn);
+        row._help = help;
+      };
+      const nest = (root) => {
+        if (row.depth > 0) {
+          root.classList.add("nested");
+          root.style.setProperty("--d", String(row.depth - 1));
+        }
+      };
+
+      if (row.type === "toggle") {
+        const root = el("div", "tg");
+        nest(root);
+        const sw = el("button", "sw");
+        sw.type = "button";
+        sw.setAttribute("role", "switch");
+        sw.setAttribute("aria-label", row.label);
+        sw.disabled = ro;
+        const value = it.options[0].value;
+        const flip = () => {
+          if (ro) return;
+          const on = list(this.values && this.values[it.name]).includes(value);
+          this._set(it.name, on ? [] : [value], false);
+        };
+        CL.on(sw, "click", flip);
+        const tl = el("span", "tl", row.label);
+        CL.on(tl, "click", flip);
+        root.append(sw, tl);
+        if (row.help.length) addHelp(root, root);
         return {
           root,
           update: (values) => {
             root.hidden = !vis(values);
-            if (field) root.classList.toggle("need", CFG.isVisible(field, values) && CFG.isRequired(field) && !CFG.isAnswered(field, values));
+            sw.setAttribute("aria-checked", String(list(values[it.name]).includes(value)));
           },
         };
       }
 
+      if (row.type === "transcript") {
+        const root = el("section", "tcard");
+        const head = el("div", "thead");
+        const lab = makeLabel();
+        head.append(lab);
+        const count = el("span", "count");
+        head.append(count);
+        root.append(head);
+        addHelp(root, lab);
+        const input = el("textarea", "tx");
+        input.dir = it.dir;
+        if (it.dir === "rtl") input.lang = "ar";
+        input.placeholder = it.placeholder || "";
+        input.spellcheck = false;
+        input.setAttribute("aria-label", row.label);
+        input.readOnly = ro;
+        CL.on(input, "input", () => this._set(it.name, input.value, true));
+        CL.on(input, "blur", () => this.extras.onBlur && this.extras.onBlur());
+        CL.onFieldKey(input, () => {}); // typed keys stay in the field (never reach Label Studio)
+        root.append(input);
+        const bar = el("div", "tbar");
+        const replay = el("button", "btn");
+        replay.type = "button";
+        replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>Replay segment`;
+        CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
+        const next = el("button", "btn");
+        next.type = "button";
+        next.innerHTML = `Next segment<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>`;
+        CL.on(next, "click", () => this.extras.onNext && this.extras.onNext());
+        if (this.extras.onReplay) bar.append(replay);
+        if (this.extras.onNext) bar.append(next);
+        if (bar.children.length) root.append(bar);
+        return {
+          root,
+          big: true,
+          input,
+          update: (values) => {
+            root.hidden = !vis(values);
+            const v = textValue(values[it.name]);
+            if (input.getRootNode().activeElement !== input && input.value !== v) input.value = v; // never under the cursor
+            root.classList.toggle("need", need(values));
+            const words = input.value.trim() ? input.value.trim().split(/\s+/).length : 0;
+            count.textContent = words ? `${words} word${words === 1 ? "" : "s"}` : "";
+          },
+        };
+      }
+
+      // question row: choices, a small text, or an unsupported field
+      const root = el("div", "q");
+      nest(root);
+      const lab = makeLabel();
+      const ctl = el("div", "ctl");
+      root.append(lab, ctl);
+      addHelp(root, lab);
+
       if (it.kind === "choices") {
-        const root = document.createElement("div");
-        root.className = "chips";
-        root.setAttribute("role", it.multiple ? "group" : "radiogroup");
-        root.setAttribute("aria-label", CFG.labelFor(items, it));
+        const chips = el("div", "chips");
+        chips.setAttribute("role", it.multiple ? "group" : "radiogroup");
+        chips.setAttribute("aria-label", row.label);
         const buttons = it.options.map((o) => {
-          const b = document.createElement("button");
+          const b = el("button", "chip", o.label);
           b.type = "button";
-          b.className = "chip";
-          b.textContent = o.label;
           if (o.hint) b.title = o.hint;
           if (!it.multiple) b.setAttribute("role", "radio");
           b.disabled = ro;
@@ -109,11 +295,12 @@
             let next;
             if (it.multiple) next = cur.includes(o.value) ? cur.filter((v) => v !== o.value) : cur.concat(o.value);
             else next = cur.includes(o.value) ? [] : [o.value]; // clicking the chosen one clears it
-            this.onChange(it.name, next, { text: false });
+            this._set(it.name, next, false);
           });
-          root.appendChild(b);
+          chips.appendChild(b);
           return [o, b];
         });
+        ctl.append(chips);
         return {
           root,
           update: (values) => {
@@ -126,64 +313,30 @@
       }
 
       if (it.kind === "textarea") {
-        const big = isBig(it);
-        const root = document.createElement("div");
-        root.className = big ? "txwrap" : "";
-        const input = document.createElement(big || it.rows > 1 ? "textarea" : "input");
-        input.className = big ? "tx" : "fi";
-        if (!big && it.rows > 1) input.rows = it.rows;
+        const input = el(it.rows > 1 ? "textarea" : "input", "fi");
+        if (it.rows > 1) input.rows = it.rows;
         input.dir = it.dir;
         if (it.dir === "rtl") input.lang = "ar";
         input.placeholder = it.placeholder || "";
         input.spellcheck = false;
-        input.setAttribute("aria-label", CFG.labelFor(items, it));
+        input.setAttribute("aria-label", row.label);
         input.readOnly = ro;
-        CL.on(input, "input", () => this.onChange(it.name, input.value, { text: true }));
+        CL.on(input, "input", () => this._set(it.name, input.value, true));
         CL.on(input, "blur", () => this.extras.onBlur && this.extras.onBlur());
-        CL.onFieldKey(input, () => {}); // typed keys stay in the field (never reach Label Studio)
-        root.appendChild(input);
-        let count = null;
-        if (big) {
-          const bar = document.createElement("div");
-          bar.className = "txbar";
-          const replay = document.createElement("button");
-          replay.type = "button";
-          replay.className = "btn";
-          replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>Replay segment`;
-          CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
-          const next = document.createElement("button");
-          next.type = "button";
-          next.className = "btn";
-          next.innerHTML = `Next segment<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>`;
-          CL.on(next, "click", () => this.extras.onNext && this.extras.onNext());
-          const sp = document.createElement("span");
-          sp.className = "sp";
-          count = document.createElement("span");
-          count.className = "count";
-          bar.append(replay, next, sp, count);
-          root.appendChild(bar);
-        }
+        CL.onFieldKey(input, () => {});
+        ctl.append(input);
         return {
           root,
-          big,
-          input,
           update: (values) => {
             root.hidden = !vis(values);
             const v = textValue(values[it.name]);
-            const doc = input.getRootNode();
-            if (doc.activeElement !== input && input.value !== v) input.value = v; // never under the cursor
-            input.classList.toggle("need", need(values));
-            if (count) {
-              const words = input.value.trim() ? input.value.trim().split(/\s+/).length : 0;
-              count.textContent = words ? `${words} word${words === 1 ? "" : "s"}` : "";
-            }
+            if (input.getRootNode().activeElement !== input && input.value !== v) input.value = v;
+            root.classList.toggle("need", need(values));
           },
         };
       }
 
-      const root = document.createElement("p");
-      root.className = "unsup";
-      root.textContent = `“${it.name}” (${it.tag}) can be edited in the native UI.`;
+      ctl.append(el("div", "unsup", `Edit “${it.name}” (${it.tag}) in the native UI.`));
       return { root, update: (values) => (root.hidden = !vis(values)) };
     }
   };

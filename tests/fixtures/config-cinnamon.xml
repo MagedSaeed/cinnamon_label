@@ -50,6 +50,13 @@
           <Choices name="segment_micro_dialect" toName="audio" perRegion="true" choice="single-radio">
             <Choice value="Adeni"/><Choice value="Tazzi"/><Choice value="White dialect (اللهجة البيضاء)"/>
           </Choices>
+          <HyperText name="segment_white_dialect_definition" value="&lt;p&gt;White dialect: a neutral variety.&lt;/p&gt;"/>
+          <Header value="Could possibly also be"/>
+          <View visibleWhen="choice-selected" whenTagName="segment_micro_dialect" whenChoiceValue="Adeni">
+            <Choices name="segment_micro_dialect_alt_1" toName="audio" perRegion="true" choice="multiple">
+              <Choice value="Tazzi"/><Choice value="White dialect (اللهجة البيضاء)"/>
+            </Choices>
+          </View>
           <View visibleWhen="choice-selected" whenTagName="segment_micro_dialect" whenChoiceValue="Tazzi">
             <Choices name="segment_micro_dialect_alt_5" toName="audio" perRegion="true" choice="multiple">
               <Choice value="Adeni"/><Choice value="White dialect (اللهجة البيضاء)"/>

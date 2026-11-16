@@ -66,3 +66,29 @@ test("parseXml decodes entities and tolerates comments", () => {
   assert.equal(ch.attrs.value, "A & B");
   assert.equal(ch.attrs.alias, "x");
 });
+
+test("layout: headers become labels, help attaches, follow-ups are indented, transcript stands alone", () => {
+  const rows = C.layout(form.segment);
+  const by = (n) => rows.find((r) => r.item && r.item.name === n);
+  assert.equal(rows[0].type, "toggle", "the leading 'Selected segment' header is dropped; skip is a switch");
+  assert.equal(rows[0].label, "Skip this segment");
+  assert.equal(by("segment_gender").label, "Speaker Gender");
+  assert.equal(by("segment_gender").depth, 0);
+  assert.equal(by("segment_skip_reason").depth, 1, "revealed by the skip switch");
+  assert.equal(by("segment_micro_dialect").depth, 1, "revealed by Dialect Validation = Yemen");
+  assert.equal(by("segment_micro_dialect_alt_5").depth, 2);
+  assert.equal(by("segment_micro_dialect_alt_1").label, "Could possibly also be");
+  assert.equal(by("segment_micro_dialect_alt_5").label, "Could possibly also be", "alternatives share the header above them");
+  assert.equal(by("segment_has_code_switch").label, "Code switching");
+  assert.notEqual(by("segment_code_switch_language").label, "Code switching", "a follow-up question is not an alternative");
+  assert.deepEqual(by("segment_micro_dialect").help, ["White dialect: a neutral variety."]);
+  assert.equal(by("segment_transcription").type, "transcript");
+  assert.equal(by("segment_transcription").depth, 0, "never indented");
+  assert.equal(by("segment_transcription").label, "Transcription");
+  assert.equal(by("segment_code_switch_phrase").type, "question", "a 2-row text without RTL stays a question row");
+  assert.ok(!rows.some((r) => r.type === "title"), "no floating headings left");
+  const task = C.layout(form.task);
+  assert.equal(task[0].type, "toggle");
+  assert.equal(task[0].label, "Skip entire video");
+  assert.ok(!form.task.some((i) => i.kind === "header" && i.text === "Video"), "the object's title header is dropped");
+});

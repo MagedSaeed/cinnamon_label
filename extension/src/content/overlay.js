@@ -55,7 +55,10 @@ video:not([data-ready]){visibility:hidden}
   background:var(--ink); color:#fff; font-size:13px; opacity:0; transition:opacity .15s; pointer-events:none}
 .toast.show{opacity:1}
 
-.transport{display:flex; align-items:center; gap:14px; padding:10px 14px; border-top:1px solid var(--line)}
+.transport{display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding:8px 14px; border-top:1px solid var(--line)}
+.transport .zone{display:flex; align-items:center; gap:12px; flex:none}
+.transport .segbar{flex:1}
+.cn{height:16px}
 .play{width:36px; height:36px; border-radius:50%; border:none; background:var(--cinnamon); color:#fff; display:grid; place-items:center; flex:none}
 .play svg{width:18px; height:18px; fill:currentColor}
 .play:disabled{opacity:.4; cursor:default}
@@ -65,7 +68,7 @@ video:not([data-ready]){visibility:hidden}
 .lanes{padding:4px 14px 12px}
 .lanes canvas{display:block; width:100%}
 .ov{height:40px; cursor:pointer; border-radius:4px}
-.dt{height:150px; margin-top:8px; border:1px solid var(--line); border-radius:6px}
+.dt{height:150px; border:1px solid var(--line); border-radius:6px}
 .zoom{display:flex; align-items:center; gap:2px; color:var(--muted); font-variant-numeric:tabular-nums}
 .zoom button{width:26px; height:26px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); font-size:15px; line-height:1}
 .zoom button:hover{border-color:#c9ced6}
@@ -119,7 +122,8 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         <footer class="transport">
           <button class="play" id="play" aria-label="Play" disabled>${ICON_PLAY}</button>
           <span class="clock"><b id="cur">0:00.0</b> / <span id="dur">–</span></span>
-          <div class="spacer"></div>
+          <div class="segbar" id="segbar" role="toolbar" aria-label="Segment tools"></div>
+          <div class="zone">
           <div class="zoom" title="Detail lane width. Ctrl + mouse wheel on the lane also zooms; the wheel scrolls.">
             <button id="zoomOut" aria-label="Show more time">−</button><input id="zoomTxt" value="15 s" spellcheck="false" autocomplete="off" inputmode="decimal" aria-label="Seconds shown in the detail lane" title="Type a width, e.g. 8 or 1:30, then press Enter"><button id="zoomIn" aria-label="Show less time">+</button>
           </div>
@@ -129,10 +133,12 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
               <option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option>
             </select>
           </label>
+          </div>
         </footer>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <section class="lanes">
           <canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas>
+          <canvas class="cn" id="cn" aria-hidden="true"></canvas>
           <canvas class="dt" id="dt" aria-label="Detail. Click to jump."></canvas>
         </section>
       </div>`);
@@ -173,6 +179,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
       host,
       video: $("video"),
       side: $("side"),
+      segbar: $("segbar"),
       // store: SegmentStore or null
       setSync(store) {
         // Quiet when everything is fine; speaks up only for a failed write or a read-only annotation.
@@ -314,6 +321,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         // Timeline lanes; the zoom label follows the detail lane's width.
         const timeline = new CL.Timeline({
           overview: $("ov"),
+          connector: $("cn"),
           detail: $("dt"),
           player,
           onView: (tl) => {

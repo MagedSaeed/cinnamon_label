@@ -427,6 +427,7 @@
         swallowSpaceUp = true;
       } else if (e.code === "ArrowLeft") player.seekBy(-5);
       else if (e.code === "ArrowRight") player.seekBy(5);
+      else if (e.code === "Escape") handled = panel.cancelMarking();
       else handled = false;
       if (handled) {
         e.preventDefault();
@@ -501,10 +502,12 @@
     player = new CL.Player(ui.video);
     ui.bindPlayer(player);
     panel = CL.createPanel(ui.side, {
+      bar: ui.segbar,
       player,
       timeline: ui.timeline,
       textFields: () => (task && task.store ? task.store.textFields : []),
     });
+    panel.setUi(ui);
     ui.onNative(() => setMode("native"));
     ui.onBack(() => setMode("cinnamon"));
 

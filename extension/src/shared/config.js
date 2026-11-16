@@ -147,7 +147,12 @@
           if (text) scope.push({ kind: "text", name: a.name || null, text, when: cleanWhen, _parent: n });
           continue;
         }
-        if (OBJECT_TAGS.has(t)) continue; // video/audio themselves
+        if (OBJECT_TAGS.has(t)) {
+          // video/audio themselves; a header right before one is its title, not a form heading
+          const last = scope[scope.length - 1];
+          if (last && last.kind === "header") scope.pop();
+          continue;
+        }
         if (t === "choices") {
           const options = (c.children || [])
             .filter((x) => x.tag && x.tag.toLowerCase() === "choice")
@@ -226,6 +231,75 @@
       .replace(/^segment_/, "")
       .replace(/_/g, " ")
       .replace(/^\w/, (c) => c.toUpperCase());
+  };
+
+  // Arrange items into rows for display (pure; no DOM):
+  //   { type: "question", item, label, help: [text], depth }   choices or small text, label column + answers
+  //   { type: "toggle", item, label, help, depth }               a single on/off option (e.g. "Skip this segment")
+  //   { type: "transcript", item, label, help }                  a large text field: its own full-width card
+  //   { type: "title", text, when } / { type: "note", text, when } leftover headers / help with no field
+  // Headers become the label of the field right below them; help text after a field is attached to it;
+  // a field revealed by an answer to another field is indented one level under it.
+  C.layout = function layout(items) {
+    const rows = [];
+    const byName = new Map();
+    let pendingHeader = null;
+    // Fields revealed by different answers to the same question (e.g. one "alternatives" field per
+    // dialect) are alternatives of each other: one header above them labels them all.
+    let group = null; // { label, sig }
+    const altSig = (it) => {
+      const w = it.when || [];
+      const last = w[w.length - 1];
+      if (!last || last.type !== "selected") return null;
+      return JSON.stringify(w.slice(0, -1)) + "|" + last.tag;
+    };
+    const big = (it) => it.kind === "textarea" && (it.rows >= 3 || (it.dir === "rtl" && it.rows >= 2));
+    const parentOf = (it) => {
+      for (let i = (it.when || []).length - 1; i >= 0; i--) {
+        const c = it.when[i];
+        if (c.type === "selected" && byName.has(c.tag)) return byName.get(c.tag);
+      }
+      return null;
+    };
+    const flushHeader = () => {
+      if (pendingHeader) rows.push({ type: "title", text: pendingHeader.text, when: pendingHeader.when });
+      pendingHeader = null;
+    };
+    for (const it of items) {
+      if (it.kind === "header") {
+        flushHeader();
+        pendingHeader = it;
+        group = null;
+        continue;
+      }
+      if (it.kind === "text") {
+        // Help for the field just above (same visibility), else a standalone note.
+        const prev = rows[rows.length - 1];
+        if (!pendingHeader && prev && prev.item && prev.type !== "title") prev.help.push(it.text);
+        else {
+          flushHeader();
+          rows.push({ type: "note", text: it.text, when: it.when });
+        }
+        continue;
+      }
+      const parent = parentOf(it);
+      const toggle = it.kind === "choices" && it.multiple && it.options.length === 1;
+      const type = toggle ? "toggle" : big(it) ? "transcript" : "question";
+      const sig = altSig(it);
+      let label;
+      if (toggle) label = it.options[0].label;
+      else if (pendingHeader) label = pendingHeader.text;
+      else if (group && sig && group.sig === sig) label = group.label;
+      else label = C.labelFor(items, it);
+      group = sig ? { label, sig } : null;
+      const row = { type, item: it, label, help: [], depth: type === "transcript" || !parent ? 0 : parent.depth + 1 };
+      if (toggle && pendingHeader) pendingHeader = null; // the option text says it all
+      pendingHeader = null;
+      rows.push(row);
+      if (it.name) byName.set(it.name, row);
+    }
+    flushHeader();
+    return rows;
   };
 
   C.missing = function missing(items, values) {
