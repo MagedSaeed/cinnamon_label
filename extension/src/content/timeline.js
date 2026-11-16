@@ -24,6 +24,9 @@
     segEdge: "#7d8594",
     segTag: "#7d8594",
     segOv: "#9aa1ad",
+    segEdgeOv: "#5f6776",
+    playedSel: "#7a3c1e",
+    waveSel: "#d9b8a5",
     sugFill: "rgba(61,68,82,0.035)",
     sugLine: "#6f7785",
     sugOv: "#a7aebb",
@@ -372,7 +375,9 @@
       return lo === Infinity ? null : [lo, hi];
     }
 
-    _wave(ctx, x0, w, top, h, t0, span, playX, gain) {
+    // sel: [x0, x1] pixel range of the selected segment: its waveform takes the segment's colour
+    // (deep cinnamon where played, light cinnamon ahead), so progress inside it is easy to see.
+    _wave(ctx, x0, w, top, h, t0, span, playX, gain, sel) {
       const mid = top + h / 2;
       const amp = (h / 2) * gain;
       ctx.fillStyle = C.center;
@@ -382,9 +387,16 @@
         if (!r) continue;
         const y0 = mid - Math.min(1, r[1]) * amp;
         const y1 = mid - Math.max(-1, r[0]) * amp;
-        ctx.fillStyle = x0 + x < playX ? C.played : C.wave;
-        ctx.fillRect(x0 + x, y0, 1, Math.max(1, y1 - y0));
+        const px = x0 + x;
+        const inSel = sel && px >= sel[0] && px < sel[1];
+        ctx.fillStyle = px < playX ? (inSel ? C.playedSel : C.played) : inSel ? C.waveSel : C.wave;
+        ctx.fillRect(px, y0, 1, Math.max(1, y1 - y0));
       }
+    }
+    // Pixel range of the selected segment on a lane drawn from t0 over span seconds, w pixels wide.
+    _selRange(t0, span, w) {
+      const g = this.store && this.store.selected ? this.segs.find((x) => x.id === this.store.selected) : null;
+      return g ? [((g.start - t0) / span) * w, ((g.end - t0) / span) * w] : null;
     }
 
     _draw() {
@@ -430,11 +442,18 @@
             const isSel = g.id === sel || g.id === "__new";
             ctx.fillStyle = isSel ? C.segSelFill : C.segFill;
             ctx.fillRect(x0, top, Math.max(dpr, x1 - x0), bottom - top);
-            ctx.fillStyle = isSel ? C.accent : C.segEdge;
-            ctx.fillRect(Math.round(x0), top, dpr, bottom - top);
-            ctx.fillRect(Math.round(x1) - dpr, top, dpr, bottom - top);
           }
-          this._wave(ctx, 0, w, 3 * dpr, h - 9 * dpr, 0, d, playX, gain);
+          this._wave(ctx, 0, w, 3 * dpr, h - 9 * dpr, 0, d, playX, gain, this._selRange(0, d, w));
+          // clear boundaries on top of the waveform: 2 px (3 px cinnamon for the selected segment)
+          for (const g of this.segs) {
+            const isSel = g.id === sel || g.id === "__new";
+            const ew = (isSel ? 3 : 2) * dpr;
+            const x0 = (g.start / d) * w;
+            const x1 = (g.end / d) * w;
+            ctx.fillStyle = isSel ? C.accent : C.segEdgeOv;
+            ctx.fillRect(Math.round(x0), top, ew, bottom - top);
+            ctx.fillRect(Math.round(x1) - ew, top, ew, bottom - top);
+          }
           // buffered strip (what plays without stopping)
           const b = this.v.buffered;
           ctx.fillStyle = C.buffered;
@@ -509,7 +528,7 @@
           }
           // waveform
           const playX = toX(t);
-          this._wave(ctx, 0, w, rulerH + 6 * dpr, h - rulerH - 12 * dpr, t0, span, playX, gain);
+          this._wave(ctx, 0, w, rulerH + 6 * dpr, h - rulerH - 12 * dpr, t0, span, playX, gain, this._selRange(t0, span, w));
           // segment edges and numbers (on top)
           ctx.font = `600 ${10.5 * dpr}px system-ui, sans-serif`;
           ctx.textBaseline = "middle";
