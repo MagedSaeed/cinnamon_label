@@ -124,6 +124,12 @@
     <div role="tabpanel" id="p-preseg" aria-labelledby="tab-preseg" class="panel cols" hidden>
       <div class="col">
         <section>
+          <label class="switch" for="psEnabled">
+            <span><b>Presegmentation<button type="button" class="tip" aria-label="About Presegmentation" data-tip="Shows the Presegment button, which suggests segments by speaker using your diarization server. Off: the button and any suggestions are hidden, and the server is never contacted from Label Studio.">i</button></b><small>Suggest segments by speaker</small></span>
+            <input type="checkbox" id="psEnabled"><i></i>
+          </label>
+        </section>
+        <section id="psSettings">
           <div class="field">
             <span class="name">Server
               <button type="button" class="tip" aria-label="About Server" data-tip="Address of your diarization server (the same server SpeakerCut used). Keep http://127.0.0.1:8000 if it runs on this computer or reaches it through an SSH tunnel.">i</button>

@@ -138,7 +138,7 @@
   const EMPTY = "No segments yet. Use Add segment while it plays, drag across the waveform, or Presegment.";
 
   // container: the side panel; bar: the segment toolbar element above the waveform.
-  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment, nudgeMs = () => 50, nudgeShiftMs = () => 250, splitGapMs = () => 100 }) {
+  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment, presegState = () => ({ enabled: true, online: null }), nudgeMs = () => 50, nudgeShiftMs = () => 250, splitGapMs = () => 100 }) {
     let store = null;
     let presegBusy = false;
     let form = null;
@@ -641,8 +641,13 @@
         // presegmentation
         const sugs = (store && store.suggestions) || [];
         const sb = $("sugBar");
-        $("aPre").hidden = !presegment;
-        $("aPre").disabled = presegBusy || !canEdit;
+        const ps = presegState();
+        $("aPre").hidden = !presegment || !ps.enabled;
+        $("aPre").disabled = presegBusy || !canEdit || ps.online === false;
+        $("aPre").title =
+          ps.online === false
+            ? "The presegmentation server isn't running (see the extension's Presegmentation tab)."
+            : "Suggest segments by speaker (nothing is added until you accept)";
         if (sugMsg) {
           sb.hidden = false;
           sb.className = "sugbar " + sugMsg.kind;

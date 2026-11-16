@@ -30,7 +30,7 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
 - **Reviewing:** with no segment selected, playing the video lights up the segment being played, on the waveform and in the list.
 - **Replay segment** plays the open segment once; turn on **Loop** beside it to repeat it until you pause. **Next segment** is at the end of the form, beside the last question.
 - **Questions and transcript:** the open segment's card shows its questions and the transcript box. The whole-video questions are at the top of the side panel. Help notes from the project are at the end of the form.
-- **Presegment:** suggests segments, drawn dashed with speaker tags. Click one to add it, or use **Add all** / **Dismiss**. Nothing is added until you accept it.
+- **Presegment:** suggests segments, drawn dashed with speaker tags. Click one to add it, or use **Add all** / **Dismiss**. Nothing is added until you accept it. The button is disabled while the server isn't running.
 - **Task list:** each row has a small button: ↓ downloads that task's video now, ✓ means it is saved (click to download again), and a percentage shows a running download (click to stop).
 - **Before submitting:** edits are written into Label Studio as you work; the Submit button waits for the last one. Label Studio's draft saving is turned off on this server (it is refused), so the extension keeps a local backup of unsubmitted work and offers to restore it if the task is reopened empty.
 
@@ -55,6 +55,7 @@ Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left t
   - reload on code changes (for development only).
 - **Saved videos:** see what is saved and how much space it uses; delete one or all. The oldest are removed automatically above the size limit.
 - **Presegmentation:**
+  - turn the feature on or off;
   - server address and status;
   - provider;
   - music removal;

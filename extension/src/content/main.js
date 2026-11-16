@@ -429,6 +429,7 @@
       if (failedTaskId !== st.taskId) {
         task = new Task(st);
         CL.guard(() => task.start())();
+        checkPresegServer().catch(() => {});
       }
       releaseForeign();
     } else if (task && st.annotationKey !== task.annotationKey) {
@@ -445,6 +446,28 @@
     if (oldExtChecked || !document.getElementById("lsp-root")) return;
     oldExtChecked = true;
     chrome.storage.local.get({ clOldExtNoticeOff: false }, (o) => panel && panel.showOldExtNotice(!o.clOldExtNoticeOff));
+  }
+
+  // Is the presegmentation server up? Checked every 15 s while a task is open in our UI, so the
+  // Presegment button is only clickable when it can work.
+  let psOnline = null; // null: not known yet
+  let psChecking = false;
+  async function checkPresegServer() {
+    if (psChecking || stopped || !settings || settings.psEnabled === false || !task || document.visibilityState !== "visible") return;
+    psChecking = true;
+    let ok;
+    try {
+      await CL.bg({ type: "CL_PS_HEALTH", serverUrl: settings.psServer });
+      ok = true;
+    } catch (_) {
+      ok = false;
+    } finally {
+      psChecking = false;
+    }
+    if (ok !== psOnline) {
+      psOnline = ok;
+      if (panel) panel.render();
+    }
   }
 
   // Presegmentation for the open task: suggestions only (the user accepts them).
@@ -600,6 +623,7 @@
       timeline: ui.timeline,
       textFields: () => (task && task.store ? task.store.textFields : []),
       presegment: runPreseg,
+      presegState: () => ({ enabled: !!(settings && settings.psEnabled !== false), online: psOnline }),
       nudgeMs: () => (settings && settings.nudgeMs) || 50,
       nudgeShiftMs: () => (settings && settings.nudgeShiftMs) || 250,
       splitGapMs: () => (settings && settings.splitGapMs != null ? settings.splitGapMs : 100),
@@ -640,7 +664,17 @@
     chrome.storage.onChanged.addListener(
       CL.guard(async (changes, area) => {
         if (area === "sync") {
+          const before = settings;
           settings = await CL.settings();
+          if (!before || before.psServer !== settings.psServer || before.psEnabled !== settings.psEnabled) {
+            psOnline = null; // another server, or switched on again: ask afresh
+            checkPresegServer().catch(() => {});
+          }
+          // Presegmentation switched off: its suggestions go too.
+          if (settings.psEnabled === false && task && task.store && task.store.suggestions && task.store.suggestions.length) {
+            task.store.dropSuggestions(task.store.suggestions.map((s) => s.key));
+          }
+          if (panel) panel.render();
           CL.setActive(settings.enabled);
           CL.setNoDrafts(settings.enabled && settings.noDrafts);
           if (ui) ui.setCloseUp(!!settings.closeUp);
@@ -655,6 +689,7 @@
     );
 
     timers.push(setInterval(CL.guard(poll), 500));
+    timers.push(setInterval(() => checkPresegServer().catch(() => {}), 15000));
     // Development: lets the background reload the extension when its files change (opt-in).
     timers.push(
       setInterval(() => {

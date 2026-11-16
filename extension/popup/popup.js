@@ -14,6 +14,7 @@ const DEFAULTS = {
   nudgeMs: 50,
   nudgeShiftMs: 250,
   splitGapMs: 100,
+  psEnabled: true,
   psServer: "http://127.0.0.1:8000",
   psProvider: "local",
   psRemoveMusic: false,
@@ -73,6 +74,8 @@ function write(s) {
   if (document.activeElement !== el("psServer")) el("psServer").value = s.psServer;
   (document.querySelector(`input[name=psProvider][value="${s.psProvider}"]`) || document.querySelector('input[name=psProvider][value="local"]')).checked = true;
   el("psRemoveMusic").checked = !!s.psRemoveMusic;
+  el("psEnabled").checked = s.psEnabled !== false;
+  el("psSettings").classList.toggle("off", s.psEnabled === false);
   el("psDropOverlap").checked = !!s.psDropOverlap;
   for (const k of PS_NUMBERS) if (document.activeElement !== el(k)) el(k).value = ZERO_IS_EMPTY.includes(k) && Number(s[k]) === 0 ? "" : String(s[k]);
 }
@@ -92,6 +95,7 @@ function read() {
     psServer: el("psServer").value.trim() || DEFAULTS.psServer,
     psProvider: document.querySelector("input[name=psProvider]:checked")?.value || DEFAULTS.psProvider,
     psRemoveMusic: el("psRemoveMusic").checked,
+    psEnabled: el("psEnabled").checked,
     psDropOverlap: el("psDropOverlap").checked,
     ...Object.fromEntries(
       PS_NUMBERS.map((k) => {
@@ -123,6 +127,7 @@ function save() {
 document.addEventListener("change", (e) => {
   if (e.target.closest(".panel")) save();
   if (e.target.name === "psProvider" || e.target.id === "psRemoveMusic") renderHealth();
+  if (e.target.id === "psEnabled") el("psSettings").classList.toggle("off", !e.target.checked);
 });
 el("reset").addEventListener("click", () => {
   write(DEFAULTS);

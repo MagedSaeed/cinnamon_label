@@ -21,6 +21,7 @@
     nudgeMs: 50, // the -/+ buttons beside a segment's start and end
     nudgeShiftMs: 250, // the same buttons with Shift held
     splitGapMs: 100, // gap left between the two parts of a split, centred on the playhead
+    psEnabled: true, // offer presegmentation at all (off: no Presegment button, no suggestions)
     psServer: "http://127.0.0.1:8000",
     psProvider: "local",
     psRemoveMusic: false,

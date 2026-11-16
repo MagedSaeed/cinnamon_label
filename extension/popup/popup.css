@@ -207,3 +207,6 @@ body:not(.ready) *, body:not(.ready) *::before, body:not(.ready) *::after { tran
 @media (prefers-color-scheme: dark) { #tooltip { background: #2A3854; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* Presegmentation switched off: its settings stay editable but read as inactive. */
+#psSettings.off { opacity: .5; }
