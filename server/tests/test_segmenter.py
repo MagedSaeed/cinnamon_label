@@ -1,0 +1,86 @@
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from segmenter import Seg, build_segments
+
+
+def spans(segs):
+    return [(s.speaker, s.start, s.end) for s in segs]
+
+
+def no_overlap_between_speakers(segs, turns):
+    for s in segs:
+        for t in turns:
+            if t.speaker != s.speaker:
+                assert t.end <= s.start + 1e-6 or t.start >= s.end - 1e-6, (s, t)
+
+
+def test_merge_same_speaker_turns():
+    turns = [Seg(0.5, 3, "A"), Seg(3.5, 6, "A"), Seg(7, 10, "B"), Seg(10.5, 12, "B")]
+    out = build_segments(turns, 15, pad=0)
+    assert spans(out) == [("A", 0.5, 6), ("B", 7, 12)]
+
+
+def test_overlap_removed_and_not_bridged():
+    # A talks 0-10, B interjects 4-5 (overlap). A's segment must not contain 4-5.
+    turns = [Seg(0, 10, "A"), Seg(4, 5, "B")]
+    out = build_segments(turns, 12, pad=0, min_seg=0.5)
+    assert ("A", 0, 4) in spans(out) and ("A", 5, 10) in spans(out)
+    assert all(s.speaker == "A" for s in out)  # B's piece is fully overlapped
+    for s in out:
+        assert not (s.start < 5 and s.end > 4)
+
+
+def test_max_dur_splits():
+    turns = [Seg(i * 5, i * 5 + 4.5, "A") for i in range(10)]  # 50 s of A
+    out = build_segments(turns, 60, pad=0, max_dur=30)
+    assert len(out) == 2 and all(s.dur <= 30 for s in out)
+    assert build_segments(turns, 60, pad=0, max_dur=0)[0].dur > 40  # unlimited
+
+
+def test_padding_clamped_to_neighbours():
+    turns = [Seg(1.0, 3.0, "A"), Seg(3.1, 6.0, "B")]
+    out = build_segments(turns, 8, pad=0.3)
+    a, b = out
+    assert a.start == 0.7 and a.end == 3.1  # clamped at B's start
+    assert b.start == 3.1 and b.end == 6.3
+    no_overlap_between_speakers(out, turns)
+
+
+def test_padding_clamped_to_file_bounds_and_min_seg():
+    turns = [Seg(0.05, 0.6, "A"), Seg(1, 5.9, "B")]
+    out = build_segments(turns, 6, pad=0.2, min_seg=1.0)
+    assert spans(out) == [("B", 0.8, 6.0)]
+
+
+def test_long_pause_same_speaker_merged():
+    # a pause alone never splits a segment; only another speaker or max_dur does
+    turns = [Seg(0, 3, "A"), Seg(8, 11, "A")]
+    out = build_segments(turns, 12, pad=0)
+    assert spans(out) == [("A", 0, 11)]
+
+
+def test_cut_at_pause_long_enough_for_padding():
+    # pauses: 0.1 s at 18 (too short for 2 x 0.2 padding), 1.0 s at 15; limit is 20 - 0.4 = 19.6
+    turns = [Seg(0, 15, "A"), Seg(16, 18, "A"), Seg(18.1, 30, "A")]
+    out = build_segments(turns, 31, pad=0.2, max_dur=20)
+    assert [(s.start, s.end) for s in out] == [(0, 15.2), (15.8, 30.2)]
+    assert all(s.dur <= 20 for s in out)
+
+
+def test_long_turn_split_at_quietest_moment():
+    turns = [Seg(0, 50, "A")]  # one 50 s turn, no pauses
+    out = build_segments(turns, 50, pad=0.2, max_dur=30, quiet_point=lambda lo, hi: 22.0)
+    assert [(s.start, s.end) for s in out] == [(0, 22.0), (22.0, 50)]  # no padding across the cut
+
+
+def test_long_turn_without_audio_hard_cut_within_limit():
+    out = build_segments([Seg(0, 50, "A")], 50, pad=0.2, max_dur=30)
+    assert len(out) == 2 and all(s.dur <= 30 for s in out)
+
+
+def test_padded_segments_never_exceed_max_dur():
+    turns = [Seg(i * 3, i * 3 + 2.6, "A") for i in range(40)]  # 2 min of A with 0.4 s pauses
+    out = build_segments(turns, 125, pad=0.2, max_dur=30)
+    assert len(out) >= 4 and all(s.dur <= 30 + 1e-6 for s in out)
+    for a, b in zip(out, out[1:]):
+        assert a.end <= b.start

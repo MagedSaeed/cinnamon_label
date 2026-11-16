@@ -64,11 +64,56 @@ Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left t
 
 ## Presegmentation server
 
-Presegmentation sends the task's audio to a diarization server running on your own machine at `http://127.0.0.1:8000` (endpoints `/health` and `/diarize`). Use the server from the SpeakerCut repository (`server/` folder); its README explains setup with Docker or `uv`, and the providers (local pyannote with `HF_TOKEN`, or pyannoteAI with `PYANNOTEAI_API_KEY`). The status in the **Presegmentation** tab turns green when the server is reachable.
+Presegmentation sends the task's audio to a diarization server running on your own machine at `http://127.0.0.1:8000` (endpoints `/health` and `/diarize`). The server is in the `server/` folder. The status in the popup's **Presegmentation** tab turns green when it is reachable.
+
+You need a Hugging Face token (read access) and to accept the terms of [`pyannote/speaker-diarization-community-1`](https://huggingface.co/pyannote/speaker-diarization-community-1) first.
+
+```bash
+cd server
+cp .env.example .env     # then put your HF_TOKEN in .env (never commit .env)
+```
+
+Write values without quotes and keep comments on their own lines (Docker's `--env-file` reads the rest of the line literally).
+
+**Option A: Docker**
+
+```bash
+cd server
+docker build -t presegment-server .     # the first build downloads torch etc. and takes a while
+docker run -d --name presegment-server --restart unless-stopped \
+  --env-file .env -p 127.0.0.1:8000:8000 -v presegment-cache:/root/.cache \
+  presegment-server
+```
+
+- It listens on `127.0.0.1:8000` only. Models and saved results are kept in the `presegment-cache` volume, so restarts are fast.
+- NVIDIA GPU: install the NVIDIA Container Toolkit and add `--gpus all` to `docker run`. Otherwise it runs on CPU.
+- Logs: `docker logs -f presegment-server`. Stop / start: `docker stop presegment-server`, `docker start presegment-server`.
+- After changing `.env` or the code: `docker build -t presegment-server . && docker rm -f presegment-server`, then the `docker run` line again.
+
+**Option B: uv**
+
+```bash
+cd server
+uv sync                  # creates .venv (pyannote.audio, torch, demucs)
+uv run uvicorn app:app --host 127.0.0.1 --port 8000
+```
+
+Saved diarization results live in `~/.cache/speakercut/results` (set `SPEAKERCUT_CACHE_DIR` to move them); delete the folder to clear them. Tests: `uv run pytest tests`.
+
+**On a cluster:** start it on a GPU node, then tunnel from your laptop through the login node: `ssh -J <login-node> -L 8000:127.0.0.1:8000 <gpu-node>`.
+
+**Providers** (chosen in the popup):
+
+| Provider | Key in `server/.env` | Notes |
+|---|---|---|
+| Local pyannote (default) | `HF_TOKEN` | Free, runs on your GPU or CPU. |
+| pyannoteAI Precision | `PYANNOTEAI_API_KEY` | Hosted models from the pyannote authors (`PYANNOTEAI_MODEL=precision-2` or `precision-3`). Best when speakers get mixed. Paid per audio second; the audio is sent to pyannoteAI and deleted within 48 h. |
+
+**Remove music first** separates the vocals (Demucs) before diarization; it helps with loud background music. **Speaker counts** (exact, or min/max) are often the simplest fix when two speakers get merged.
 
 ## Development
 
 - Plain JavaScript, Manifest V3, no build step. Content scripts are in `extension/src/content`, the page bridge (which talks to Label Studio's annotation state) in `extension/src/page/bridge.js`, pure logic in `extension/src/shared`.
-- Tests: `node --test tests/*.test.js`
+- Tests: `node --test tests/*.test.js` (extension); `cd server && uv run pytest tests` (server)
 - Auto-reload: turn on **Reload on code changes** in the popup, then after editing run `date +%s%N > extension/build-id.txt`. The extension reloads and refreshes Label Studio tabs (never while edits are still being written).
 - Icons: `python3 tools/make_icons.py extension/icons` (needs Pillow) draws the PNG icons to match `extension/icons/logo.svg`.
