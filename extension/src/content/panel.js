@@ -204,11 +204,8 @@
     };
     let flashTimer;
     let emptyText = EMPTY;
-    const flash = (t, err = false) => {
-      setNote(t, err);
-      $("segEmptyMain").textContent = t;
-      clearTimeout(flashTimer);
-      flashTimer = setTimeout(() => ($("segEmptyMain").textContent = emptyText), 5000);
+    // Messages appear once, as the brief toast at the top (it fades by itself).
+    const flash = (t) => {
       if (ui && ui.toast) ui.toast(t);
     };
     const refreshHistory = () =>
@@ -233,7 +230,7 @@
         const inside = S.segmentAt(base(), t);
         if (inside) {
           const n = store.segments.findIndex((g) => g.id === inside.id) + 1;
-          return flash(`The playhead is inside segment ${n}. Move it to where the new speech starts.`, true);
+          return flash(`The playhead is inside segment ${n}.`);
         }
         marking = { start: t };
         timeline.marking = marking;
@@ -242,12 +239,21 @@
         return api.render();
       }
       const r = S.create(base(), marking.start, t, D());
-      if (!r || t <= marking.start + S.MIN_DUR) return flash("Play on to where the speech ends, then press Mark end.", true);
+      if (!r || t <= marking.start + S.MIN_DUR) return; // Mark end is disabled until then
       stopMarking();
       focusNext = true;
       await store.apply(r.plan, { select: "created" });
     });
     CL.on($("aCancel"), "click", stopMarking);
+    // While marking, "Mark end" is enabled only once the playhead is past the start.
+    function paintMarkEnd() {
+      const t = player.v.currentTime || 0;
+      if (marking) $("aAdd").disabled = !editable() || t <= marking.start + S.MIN_DUR;
+      // "Split at playhead" only when the playhead is inside the selected segment (not at its edges).
+      const g = sel();
+      if (g) $("aSplit").disabled = !editable() || !S.split(base(), g.id, t);
+    }
+    for (const ev of ["timeupdate", "seeked"]) CL.on(player.v, ev, paintMarkEnd);
     CL.on($("aUnsel"), "click", () => store && store.select(null));
 
     // ---- cards: the play button plays (or pauses) just that segment, without opening it ----
@@ -305,7 +311,7 @@
       if (!g) return;
       const step = ((e.shiftKey ? nudgeShiftMs() : nudgeMs()) * Number(b.dataset.dir)) / 1000;
       const plan = S.moveEdge(base(), g.id, b.dataset.edge, g[b.dataset.edge] + step, D());
-      if (!plan || !plan.update.length) return flash("That edge can't move further that way.", true);
+      if (!plan || !plan.update.length) return; // the button is disabled in this case anyway
       await store.apply(plan, { select: g.id });
     });
 
@@ -369,7 +375,7 @@
         if (b) r.plan.fields.push({ id: g.id, name, value: a ? `${a} ${b}` : b });
       }
       await store.apply(r.plan, { select: g.id });
-      flash("Merged. The transcripts were joined; this segment's answers were kept.");
+      flash("Merged; transcripts joined.");
     });
     CL.on($("aDel"), "click", async () => {
       const g = sel();
@@ -415,7 +421,7 @@
       if (!editable()) return;
       const fit = S.fitInto(base(), s.start, s.end, D());
       store.dropSuggestions([s.key]);
-      if (!fit) return flash("That suggestion lies inside existing segments; there is no free time left for it.", true);
+      if (!fit) return flash("No free time left for that suggestion.");
       focusNext = true;
       await store.apply({ create: [fit], update: [], remove: [] }, { select: "created" });
     }
@@ -425,7 +431,7 @@
       const r = S.addMany(base(), store.suggestions || [], D());
       store.setSuggestions([]);
       if (r.added) await store.apply(r.plan);
-      flash(`Added ${r.added} segment${r.added === 1 ? "" : "s"}${r.skipped ? `; ${r.skipped} skipped (no free time)` : ""}. Check each one; Undo removes them all.`);
+      flash(`Added ${r.added} segment${r.added === 1 ? "" : "s"}${r.skipped ? ` (${r.skipped} skipped: no free time)` : ""}.`);
     });
     CL.on($("sugClear"), "click", () => {
       sugMsg = null;
@@ -670,7 +676,8 @@
         $("aCancel").hidden = !marking;
         for (const id of ["bWho", "gStart", "bDash", "gEnd", "dDur", "aPlay", "aSplit", "aMerge", "aDel"]) $(id).hidden = !g || !!marking;
         $("bHint").hidden = !!g && !marking;
-        $("bHint").textContent = marking ? "Let it play, then press Mark end where the speech stops." : canEdit ? "Select a segment to edit it." : "";
+        $("bHint").textContent = marking ? "" : canEdit ? "Select a segment to edit it." : "";
+        paintMarkEnd();
         if (g) {
           $("bWhoTxt").textContent = `Segment ${i + 1}`;
           if (root.activeElement !== $("dStart")) $("dStart").value = fmtMs(g.start);
@@ -679,12 +686,15 @@
           for (const id of ["dStart", "dEnd"]) $(id).disabled = !canEdit;
           const ms = nudgeMs();
           const fmtStep = (v) => (v >= 1000 ? `${v / 1000} s` : `${v} ms`);
+          const b0 = base();
           bar.querySelectorAll(".nudge").forEach((n) => {
-            n.disabled = !canEdit;
+            // Disabled when that edge can't move any further that way (neighbour, video end, minimum length).
+            const p = canEdit ? S.moveEdge(b0, g.id, n.dataset.edge, g[n.dataset.edge] + (Number(n.dataset.dir) * ms) / 1000, D()) : null;
+            n.disabled = !p || !p.update.length;
             const which = n.dataset.edge === "start" ? "Start" : "End";
             n.title = `${which} ${fmtStep(ms)} ${n.dataset.dir < 0 ? "earlier" : "later"}. Hold Shift: ${fmtStep(nudgeShiftMs())}.`;
           });
-          for (const id of ["aSplit", "aDel"]) $(id).disabled = !canEdit;
+          $("aDel").disabled = !canEdit;
           $("aMerge").disabled = !canEdit || i === segs.length - 1;
         }
 
