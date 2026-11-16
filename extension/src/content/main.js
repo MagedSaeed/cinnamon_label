@@ -447,7 +447,14 @@
         swallowSpaceUp = true;
       } else if (e.code === "ArrowLeft") player.seekBy(-5);
       else if (e.code === "ArrowRight") player.seekBy(5);
-      else if (e.code === "Escape") handled = panel.cancelMarking();
+      else if (e.code === "Escape") {
+        // Esc: cancel "Add segment" if it's running, otherwise unselect the segment.
+        handled = panel.cancelMarking();
+        if (!handled && task && task.store && task.store.selected) {
+          task.store.select(null);
+          handled = true;
+        }
+      }
       else handled = false;
       if (handled) {
         e.preventDefault();
