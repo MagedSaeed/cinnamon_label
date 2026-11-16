@@ -154,7 +154,7 @@
       player.setNetwork(this.url);
       ui.setStreaming(true);
       ui.timeline.setMessage("The waveform fills in as the video downloads.");
-      const onProgress = (p) => !this.dead && ui.setNet({ kind: "downloading", ...p });
+      const onProgress = (p) => !this.dead && ui.setNet({ kind: "downloading", ...p, waiting: !(p.rate > 0) && p.loaded < (p.total || Infinity) });
       const onChunk = () => this.pumpAudio();
       const acquire = () => CL.acquireSlot(() => (document.visibilityState === "visible" ? 0 : 1));
       if (pre) {
@@ -163,6 +163,7 @@
         Object.assign(this.dl, { onProgress, onChunk, acquire });
         this.runP = pre.done;
         this.adopted = true;
+        onProgress({ loaded: this.dl.loaded, total: this.dl.total, rate: 0 }); // show where it is right away
       } else {
         this.dl = new CL.Downloader(this.url, { connections: settings.connections, onProgress, onChunk, acquire });
         this.runP = this.dl.run();
@@ -541,9 +542,6 @@
       return;
     }
     CL.backup.prune();
-    try {
-      if (!localStorage.getItem("cinnamonLabel.mode")) CL.setMode("cinnamon");
-    } catch (_) {}
     await CL.cache.applyQueuedDeletes().catch(CL.warn);
 
     ui = CL.createOverlay();
@@ -561,6 +559,7 @@
     panel.setUi(ui);
     CL.prefetch.setStatusListener((s) => ui && ui.setAhead(s));
     ui.setCloseUp(!!settings.closeUp);
+    CL.allowMove = !!settings.moveSegments;
     ui.onNative(() => setMode("native"));
     ui.onBack(() => setMode("cinnamon"));
 
@@ -593,6 +592,7 @@
           CL.setActive(settings.enabled);
           CL.setNoDrafts(settings.enabled && settings.noDrafts);
           if (ui) ui.setCloseUp(!!settings.closeUp);
+          CL.allowMove = !!settings.moveSegments;
           if (!settings.enabled) {
             CL.setMode("native");
             shutdown();

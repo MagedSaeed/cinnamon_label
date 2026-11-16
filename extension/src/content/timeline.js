@@ -104,7 +104,8 @@
       CL.on(this.ov, "pointercancel", ovEnd);
 
       // Detail lane: segments.
-      //  drag on empty waveform -> new segment; drag an edge -> resize; click a segment -> select + seek;
+      //  drag on empty waveform -> new segment; drag an edge -> resize; drag a segment's middle -> move it;
+      //  click a segment -> select + seek;
       //  click empty -> seek. Edges snap to the playhead and other edges (Shift: no snapping);
       //  Alt while resizing leaves a touching neighbour where it is.
       CL.on(this.dt, "pointerdown", (e) => this._down(e));
@@ -210,7 +211,7 @@
         const inside = globalThis.CLSeg.segmentAt(base, t);
         // On a suggestion (outside real segments): a click adds it, a drag still creates a segment.
         const sug = !inside && this.editable ? this._sugAt(t) : null;
-        this.drag = inside ? { kind: "select", id: inside.id, x0: x } : { kind: "create", t0: this._snap(t, e), base, x0: x, sug };
+        this.drag = inside ? { kind: "select", id: inside.id, x0: x, t0: t, base, seg: inside } : { kind: "create", t0: this._snap(t, e), base, x0: x, sug };
       }
     }
     // The ruler strip along the top of the lane (scrub zone).
@@ -243,7 +244,7 @@
         const t = this._xToTime(e);
         const inSeg = S.segmentAt(this.segs, t);
         const sug = !this.hoverEdge && !inSeg && this.editable ? this._sugAt(t) : null;
-        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : sug ? "copy" : this.editable && !inSeg ? "crosshair" : "pointer";
+        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : sug ? "copy" : !this.editable ? "pointer" : inSeg ? (CL.allowMove ? "grab" : "pointer") : "crosshair";
         this.dt.title = sug ? `Click to add this suggested segment (${sug.speaker}), or drag to make your own.` : "";
         return this.invalidate();
       }
@@ -253,6 +254,17 @@
       if (d.kind === "edge") {
         const t = this._snap(this._xToTime(e), e, d.id);
         d.plan = S.moveEdge(d.base, d.id, d.edge, t, this.duration, { detach: e.altKey });
+        this.preview = d.plan ? S.apply(d.base, d.plan) : null;
+      } else if (d.kind === "select" && this.editable && CL.allowMove) {
+        // Drag the middle of a segment: slide the whole segment, keeping its length. Either edge
+        // snaps to the playhead or a neighbour's edge (Shift: no snapping).
+        this.dt.style.cursor = "grabbing";
+        let delta = this._xToTime(e) - d.t0;
+        const ds = this._snap(d.seg.start + delta, e, d.id) - (d.seg.start + delta);
+        const de = this._snap(d.seg.end + delta, e, d.id) - (d.seg.end + delta);
+        const snapBy = ds && de ? (Math.abs(ds) < Math.abs(de) ? ds : de) : ds || de;
+        delta += snapBy;
+        d.plan = S.shift(d.base, d.id, delta, this.duration);
         this.preview = d.plan ? S.apply(d.base, d.plan) : null;
       } else if (d.kind === "create" && this.editable) {
         const r = S.create(d.base, d.t0, this._snap(this._xToTime(e), e), this.duration);
@@ -281,6 +293,8 @@
         this.player.seekTo(t);
       } else if (d.plan && store) {
         store.apply(d.plan, { select: d.kind === "create" ? "created" : d.id });
+      } else if (d.kind === "select" && store) {
+        store.select(d.id); // dragged but could not move (no room): still select it
       }
       this.preview = null;
       this.invalidate();

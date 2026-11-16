@@ -148,6 +148,23 @@
     return plan;
   };
 
+  // Slide segment `id` by delta seconds, keeping its length. It stops at its neighbours and at the
+  // ends of the video (segments never overlap). Returns null if it cannot move.
+  S.shift = function shift(segs, id, delta, duration) {
+    const s = sorted(segs);
+    const i = s.findIndex((g) => g.id === id);
+    if (i < 0) return null;
+    const g = s[i];
+    const len = g.end - g.start;
+    const lo = i > 0 ? s[i - 1].end : 0;
+    const hi = i + 1 < s.length ? s[i + 1].start : duration != null ? duration : Infinity;
+    const ns = round(Math.min(Math.max(g.start + delta, lo), hi - len));
+    if (!(ns >= lo - EPS) || Math.abs(ns - g.start) < EPS) return null;
+    const plan = emptyPlan();
+    plan.update.push({ id, start: ns, end: round(ns + len) });
+    return plan;
+  };
+
   // Split at t: the segment keeps [start, t], a new one gets [t, end].
   S.split = function split(segs, id, t) {
     const g = segs.find((x) => x.id === id);

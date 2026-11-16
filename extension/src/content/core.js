@@ -16,7 +16,8 @@
     devReload: false,
     // presegmentation (the user's diarization server; same rules as the old SpeakerCut)
     prefetchNext: 1, // look-ahead: how many next unannotated tasks' videos to download (0 = off)
-    closeUp: false, // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
+    closeUp: false,
+    moveSegments: false, // drag a segment's middle to slide the whole segment (off: only edges move) // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
     nudgeMs: 50, // the -/+ buttons beside a segment's start and end
     nudgeShiftMs: 250, // the same buttons with Shift held
     psServer: "http://127.0.0.1:8000",
@@ -44,9 +45,18 @@
   const MODE_KEY = "cinnamonLabel.mode";
   CL.getMode = () => {
     try {
-      return localStorage.getItem(MODE_KEY) === "native" ? "native" : "cinnamon";
+      // Label Studio's own UI until the user picks Cinnamon Label; then their last choice sticks.
+      return localStorage.getItem(MODE_KEY) === "cinnamon" ? "cinnamon" : "native";
     } catch (_) {
       return "native";
+    }
+  };
+  // Has the user ever chosen a UI here? Until then the "Use Cinnamon Label" button invites attention.
+  CL.hasChosenMode = () => {
+    try {
+      return !!localStorage.getItem(MODE_KEY);
+    } catch (_) {
+      return true;
     }
   };
   CL.setMode = (m) => {

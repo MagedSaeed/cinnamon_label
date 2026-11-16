@@ -101,3 +101,27 @@ test("thousands of random edits keep segments valid", () => {
   }
   assert.ok(n > 100, "the test actually created segments");
 });
+
+test("shift slides a segment and stops at neighbours", () => {
+  const base = [
+    { id: "a", start: 0, end: 10 },
+    { id: "b", start: 20, end: 30 },
+    { id: "c", start: 40, end: 50 },
+  ];
+  const D = 60;
+  assert.deepEqual(S.shift(base, "b", 3, D).update, [{ id: "b", start: 23, end: 33 }]);
+  assert.deepEqual(S.shift(base, "b", 100, D).update, [{ id: "b", start: 30, end: 40 }]); // stops at c
+  assert.deepEqual(S.shift(base, "b", -100, D).update, [{ id: "b", start: 10, end: 20 }]); // stops at a
+  assert.deepEqual(S.shift(base, "c", 100, D).update, [{ id: "c", start: 50, end: 60 }]); // video end
+  assert.deepEqual(S.shift(base, "a", -5, D), null); // already at 0
+  const tight = [
+    { id: "x", start: 0, end: 5 },
+    { id: "y", start: 5, end: 8 },
+    { id: "z", start: 8, end: 12 },
+  ];
+  assert.equal(S.shift(tight, "y", 1, D), null); // touching both sides: no room
+  for (const k of [-7, -2, 0.5, 4, 25]) {
+    const r = S.shift(base, "b", k, D);
+    if (r) assert.deepEqual(S.validate(S.apply(base, r), D), []);
+  }
+});

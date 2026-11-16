@@ -9,7 +9,17 @@
 
   const inflight = new Map(); // media key -> { taskId, dl, blob, done (Promise<Blob>) }
   let running = false;
-  let onStatus = () => {};
+  let onStatusFn = () => {};
+  // Every background download with its own progress: [{ taskId, loaded, total }].
+  let statusTimer = 0;
+  const onStatus = () => {
+    if (statusTimer) return;
+    statusTimer = setTimeout(() => {
+      statusTimer = 0;
+      const list = [...inflight.values()].filter((e) => !e.blob).map((e) => ({ taskId: e.taskId, loaded: e.dl.loaded, total: e.dl.total }));
+      onStatusFn(list.length ? list : null);
+    }, 200);
+  };
 
   const apiBase = () => location.pathname.split("/projects/")[0]; // e.g. "/cinnamon"
   const viewAndProject = () => ({
@@ -39,13 +49,14 @@
 
   CL.prefetch = {
     setStatusListener(fn) {
-      onStatus = fn || (() => {});
+      onStatusFn = fn || (() => {});
     },
 
     // A prefetch in progress (or just finished) for this media: hand it to the task being opened.
     take(key) {
       const e = inflight.get(key);
       if (e) inflight.delete(key);
+      onStatus();
       return e || null;
     },
 
@@ -72,7 +83,7 @@
         CL.warn("Look-ahead download stopped:", e);
       } finally {
         running = false;
-        onStatus(null);
+        onStatus();
       }
     },
 
@@ -87,7 +98,7 @@
       }
       Object.assign(dl, {
         onChunk: () => {},
-        onProgress: (p) => inflight.has(key) && onStatus({ taskId, loaded: p.loaded, total: p.total }),
+        onProgress: () => inflight.has(key) && onStatus(),
         acquire: () => CL.acquireSlot(2),
       });
       const entry = { taskId, dl, blob: null, background: true, done: null };
@@ -100,7 +111,7 @@
         .catch(() => {})
         .finally(() => {
           if (inflight.get(key) === entry) inflight.delete(key);
-          onStatus(null);
+          onStatus();
         });
       inflight.set(key, entry);
     },
@@ -110,7 +121,7 @@
       const dl = new CL.Downloader(url, {
         connections: 2,
         acquire: () => CL.acquireSlot(2), // lowest priority: the open task always goes first
-        onProgress: (p) => inflight.has(key) && onStatus({ taskId, loaded: p.loaded, total: p.total }),
+        onProgress: () => inflight.has(key) && onStatus(),
       });
       const entry = { taskId, dl, blob: null, done: null };
       entry.done = dl.run().then(async (blob) => {

@@ -106,6 +106,27 @@ video:not([data-ready]){visibility:hidden}
 .pill .msg:empty{display:none}
 button{font:inherit; cursor:pointer; border:none; border-radius:6px; padding:5px 10px; background:#8a4b2a; color:#fff; white-space:nowrap}
 button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
+/* Until Cinnamon Label has been tried once: a soft pulsing ring and a short invitation. */
+.pill .new{display:none; color:#5b6270}
+.pill.invite .new{display:inline}
+.pill.invite{border-color:#d9b8a5}
+/* While the button is out: grow, glow and settle three times, rest 5 s, repeat. */
+.attn #back{animation:cl-attn 1.3s ease-in-out 3}
+@keyframes cl-attn{
+  0%{transform:scale(1); box-shadow:0 0 0 0 rgba(138,75,42,.6); background:#8a4b2a}
+  30%{transform:scale(1.12); box-shadow:0 0 0 8px rgba(138,75,42,.25); background:#b5652f}
+  60%{transform:scale(1); box-shadow:0 0 0 14px rgba(138,75,42,0); background:#8a4b2a}
+  100%{transform:scale(1); box-shadow:0 0 0 0 rgba(138,75,42,0); background:#8a4b2a}
+}
+@media (prefers-reduced-motion:reduce){ .attn #back{animation:none} }
+.pill .hide{background:none; color:#5b6270; padding:4px 6px; animation:none}
+.pill .hide:hover{background:#f1f3f6; color:#1d2129}
+/* Put away: just the logo, small, in the window's bottom-right corner. */
+.dot{position:fixed; z-index:31; right:16px; bottom:16px; width:36px; height:36px; padding:0; border-radius:50%;
+  background:#fff; border:1px solid #e3e6eb; box-shadow:0 1px 4px rgba(29,33,41,.18); display:flex; align-items:center; justify-content:center}
+.dot:hover{border-color:#8a4b2a}
+.dot img{width:20px; height:20px}
+[hidden]{display:none !important}
 `;
 
   function el(html) {
@@ -167,8 +188,51 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
     pillHost.id = "cinnamon-label-pill";
     pillHost.style.display = "none";
     const proot = pillHost.attachShadow({ mode: "open" });
-    proot.innerHTML = `<style>${PILL_CSS}</style><div class="pill"><span class="msg" id="msg"></span><button id="back">Use Cinnamon Label</button></div>`;
+    proot.innerHTML = `<style>${PILL_CSS}</style><div class="pill"><span class="msg" id="msg"></span><span class="new">Try a smoother editor for this task</span><button id="back">Use Cinnamon Label</button><button class="hide" id="hide" title="Put away. The Cinnamon Label logo stays in the corner." aria-label="Put away">✕</button></div>
+      <button class="dot" id="dot" hidden title="Use Cinnamon Label" aria-label="Show the Use Cinnamon Label button"><img alt="" src="${chrome.runtime.getURL("icons/icon32.png")}"></button>`;
     const pill = proot.querySelector(".pill");
+    const dot = proot.getElementById("dot");
+    const PUT_AWAY = "cinnamonLabel.pillAway";
+    const isAway = () => {
+      try {
+        return localStorage.getItem(PUT_AWAY) === "1";
+      } catch (_) {
+        return false;
+      }
+    };
+    let pillMessage = "";
+    const paintPill = () => {
+      const away = isAway() && !pillMessage; // an error message is always shown in full
+      pill.hidden = away;
+      dot.hidden = !away;
+    };
+    const setAway = (on) => {
+      try {
+        localStorage.setItem(PUT_AWAY, on ? "1" : "0");
+      } catch (_) {}
+      paintPill();
+    };
+    // Draw the eye once each time the button appears (page opened, or switched to native).
+    let pillVisibleBefore = false;
+    // Repeats every 5 s while the button is out; putting it away (the corner logo) stops it.
+    let attnTimer = 0;
+    const attention = () => {
+      clearTimeout(attnTimer);
+      if (!pillVisible || isAway() || pillMessage) return;
+      pill.classList.remove("attn");
+      void pill.offsetWidth; // restart the animation
+      pill.classList.add("attn");
+    };
+    proot.addEventListener("animationend", (e) => {
+      if (!e.target.closest(".attn")) return;
+      pill.classList.remove("attn");
+      attnTimer = setTimeout(attention, 5000);
+    });
+    proot.getElementById("hide").addEventListener("click", () => setAway(true));
+    dot.addEventListener("click", () => {
+      setAway(false);
+      attention();
+    });
 
     document.documentElement.append(host, pillHost);
 
@@ -230,6 +294,11 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
       showPill(on, message = "") {
         pillVisible = !!on;
         proot.getElementById("msg").textContent = message;
+        pillMessage = message;
+        pill.classList.toggle("invite", !message && !CL.hasChosenMode());
+        if (on && !pillVisibleBefore) attention();
+        pillVisibleBefore = !!on;
+        paintPill();
         pillHost.style.display = on ? "block" : "none";
         place();
       },
@@ -250,13 +319,13 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         api._toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
       },
       // Background / look-ahead downloads: { taskId, loaded, total, current } or null.
-      setAhead(s) {
+      setAhead(list) {
         const elx = $("ahead");
-        elx.hidden = !s;
-        if (!s) return;
-        const pct = s.total ? Math.floor((100 * s.loaded) / s.total) : null;
-        elx.textContent = `Task ${s.taskId} in the background${pct != null ? `: ${pct}%` : "…"}`;
-        elx.title = "Downloading another task's video ahead of time, so it opens instantly.";
+        elx.hidden = !list || !list.length;
+        if (elx.hidden) return;
+        const one = (s) => `task ${s.taskId} ${s.total ? Math.floor((100 * s.loaded) / s.total) + "%" : "…"}`;
+        elx.textContent = "Background: " + list.map(one).join(", ");
+        elx.title = "Videos of other tasks downloading in the background (left unfinished, or the next tasks in your list), so they open instantly. The open task always goes first.";
       },
       // While the player streams from the server (before the download completes).
       setStreaming(on) {
@@ -281,6 +350,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
             const parts = [];
             parts.push(s.total ? `Downloading ${U.fmtBytes(s.loaded)} of ${U.fmtBytes(s.total)}` : `Downloading ${U.fmtBytes(s.loaded)}`);
             if (s.rate > 0) parts.push(`${(s.rate / 1e6).toFixed(1)} MB/s`);
+            else if (s.waiting) parts.push("waiting for a free connection");
             const eta = U.fmtEta(s.eta);
             if (eta) parts.push(eta);
             text = parts.join(", ");
