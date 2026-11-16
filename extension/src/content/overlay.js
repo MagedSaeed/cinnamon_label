@@ -55,7 +55,10 @@ video:not([data-ready]){visibility:hidden}
   border:1px solid #f0d48a; color:#6b4e00; font-size:12.5px; font-weight:500}
 .streamnote svg{width:14px; height:14px; flex:none; fill:none; stroke:#b7791f; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
 .side{border-left:1px solid var(--line); background:var(--surface); padding:18px; overflow:auto}
-.side{display:flex; flex-direction:column; min-height:0; min-width:0}
+.side{display:flex; flex-direction:column; min-height:0; min-width:0; padding-bottom:0}
+/* Space under the last card when scrolled to the end (a scrolling flex column drops its bottom padding). */
+.side > *{flex-shrink:0} /* full height, so the side panel scrolls rather than squeezing it */
+.side::after{content:""; flex:0 0 24px}
 .stage{min-height:0}
 .sync{display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:var(--muted); font-size:13px}
 .sync i{width:8px; height:8px; border-radius:50%; background:#c4cad3}
