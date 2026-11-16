@@ -427,6 +427,33 @@
         ctx.fillRect(0, 0, w, h);
         if (d) {
           const playX = (t / d) * w;
+          const top = 0;
+          const bottom = h - 4 * dpr; // the buffered strip sits below
+          // A miniature of the detail lane: suggestions (dashed) and segments (tinted, edged) behind
+          // the waveform, the selected segment in cinnamon.
+          ctx.save();
+          ctx.setLineDash([4 * dpr, 3 * dpr]);
+          ctx.strokeStyle = C.sugLine;
+          ctx.lineWidth = dpr;
+          for (const s of this.sugs) {
+            const x0 = (s.start / d) * w;
+            const x1 = (s.end / d) * w;
+            ctx.fillStyle = C.sugFill;
+            ctx.fillRect(x0, top, x1 - x0, bottom - top);
+            ctx.strokeRect(x0 + dpr / 2, top + dpr / 2, Math.max(dpr, x1 - x0 - dpr), bottom - top - dpr);
+          }
+          ctx.restore();
+          const sel = this.store && this.store.selected;
+          for (const g of this.segs) {
+            const x0 = (g.start / d) * w;
+            const x1 = (g.end / d) * w;
+            const isSel = g.id === sel || g.id === "__new";
+            ctx.fillStyle = isSel ? C.segSelFill : C.segFill;
+            ctx.fillRect(x0, top, Math.max(dpr, x1 - x0), bottom - top);
+            ctx.fillStyle = isSel ? C.accent : C.segEdge;
+            ctx.fillRect(Math.round(x0), top, dpr, bottom - top);
+            ctx.fillRect(Math.round(x1) - dpr, top, dpr, bottom - top);
+          }
           this._wave(ctx, 0, w, 3 * dpr, h - 9 * dpr, 0, d, playX, gain);
           // buffered strip (what plays without stopping)
           const b = this.v.buffered;
@@ -434,20 +461,6 @@
           for (let i = 0; i < b.length; i++) {
             const x0 = (b.start(i) / d) * w;
             ctx.fillRect(x0, h - 3 * dpr, (b.end(i) / d) * w - x0, 3 * dpr);
-          }
-          // segments band (top)
-          const sel = this.store && this.store.selected;
-          for (const g of this.segs) {
-            const x0 = (g.start / d) * w;
-            ctx.fillStyle = g.id === sel ? C.accent : C.segOv;
-            ctx.fillRect(x0, 0, Math.max(dpr, ((g.end - g.start) / d) * w), 3 * dpr);
-          }
-          // suggestions band (dotted, just under the segments band)
-          ctx.fillStyle = C.sugOv;
-          for (const s of this.sugs) {
-            const x0 = (s.start / d) * w;
-            const x1 = (s.end / d) * w;
-            for (let x = x0; x < x1; x += 4 * dpr) ctx.fillRect(x, 4 * dpr, Math.min(2 * dpr, x1 - x), 2 * dpr);
           }
           // detail window
           const vx = (this.viewStart / d) * w;
