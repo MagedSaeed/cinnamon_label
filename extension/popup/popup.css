@@ -164,6 +164,10 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 .list li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1px 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .list li:last-child { border-bottom: 0; }
 .list .name { margin: 0; font-size: 13px; font-weight: 550; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .status { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 550; color: var(--muted); background: var(--field); }
+.list .status:empty { display: none; }
+.list .status[data-s="submitted"], .list .status[data-s="skipped"] { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.list .status[data-s="open"] { color: var(--accent); background: var(--accent-soft); }
 .list .file { grid-column: 1; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list .size { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
 .list .del { grid-column: 2; grid-row: 2; justify-self: end; }

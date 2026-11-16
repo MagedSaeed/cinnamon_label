@@ -96,6 +96,7 @@
 
   async function paint() {
     await CL.page("tagRows").catch(() => 0);
+    if (!timer) return; // stopped meanwhile
     for (const { cell, id } of rows()) {
       let b = cell.querySelector(".cl-dl");
       if (!b) {

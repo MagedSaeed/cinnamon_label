@@ -125,3 +125,19 @@ test("shift slides a segment and stops at neighbours", () => {
     if (r) assert.deepEqual(S.validate(S.apply(base, r), D), []);
   }
 });
+
+test("shift stops exactly at neighbours whose edges are not ms-aligned", () => {
+  const base = [
+    { id: "a", start: 0, end: 5.0004 },
+    { id: "b", start: 6, end: 8 },
+    { id: "c", start: 9.0006, end: 12 },
+  ];
+  const left = S.shift(base, "b", -10, 20);
+  assert.ok(left);
+  assert.deepEqual(S.validate(S.apply(base, left), 20), []);
+  assert.ok(Math.abs(left.update[0].start - 5.0004) < 1e-9);
+  const right = S.shift(base, "b", 10, 20);
+  assert.ok(right);
+  assert.deepEqual(S.validate(S.apply(base, right), 20), []);
+  assert.ok(Math.abs(right.update[0].end - 9.0006) < 1e-9);
+});

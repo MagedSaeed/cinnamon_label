@@ -9,6 +9,7 @@
 
   const inflight = new Map(); // media key -> { taskId, dl, blob, done (Promise<Blob>) }
   let running = false;
+  let pendingAfter = null;
   let onStatusFn = () => {};
   // Every background download with its own progress: [{ taskId, loaded, total }].
   let statusTimer = 0;
@@ -63,7 +64,11 @@
     // Called when the open task's video is complete. settings: { prefetchNext, cacheLimitGB }.
     async after(currentId, settings) {
       const n = Number(settings.prefetchNext) || 0;
-      if (!n || running) return;
+      if (!n) return;
+      if (running) {
+        pendingAfter = [currentId, settings]; // run again when this one ends
+        return;
+      }
       running = true;
       try {
         const list = await listAround(currentId);
@@ -76,7 +81,8 @@
         for (const t of next) {
           const url = new URL(t.data.video || t.data.audio, location.href).href;
           const key = U.mediaKey(url);
-          if (inflight.has(key) || (await CL.cache.has(key).catch(() => false))) continue;
+          if (inflight.has(key) || (CL.openMediaKey && CL.openMediaKey() === key)) continue;
+          if (await CL.cache.has(key).catch(() => false)) continue;
           await this._download(t.id, url, key, settings);
         }
       } catch (e) {
@@ -84,14 +90,20 @@
       } finally {
         running = false;
         onStatus();
+        if (pendingAfter) {
+          const [id, s] = pendingAfter;
+          pendingAfter = null;
+          this.after(id, s);
+        }
       }
     },
 
     // A download the user switched away from: let it finish at low priority and save it.
-    // At most 2 continue at once; the oldest is stopped if more pile up.
-    continueInBackground(key, taskId, name, dl, runP, settings) {
+    // They share the connection budget, so more of them just take turns. An unfinished download is
+    // held in memory, so past 6 the oldest is stopped (its list button then shows ↓ again).
+    continueInBackground(key, taskId, name, dl, runP, settings, { savesItself = false } = {}) {
       const bg = [...inflight.entries()].filter(([, e]) => e.background);
-      while (bg.length >= 2) {
+      while (bg.length >= 6) {
         const [k, e] = bg.shift();
         e.dl.abort();
         inflight.delete(k);
@@ -104,7 +116,7 @@
       const entry = { taskId, dl, blob: null, background: true, done: null };
       entry.done = runP.then(async (blob) => {
         entry.blob = blob;
-        await CL.cache.put(key, blob, settings.cacheLimitGB * 1e9, { taskId, name }).catch(CL.warn);
+        if (!savesItself) await CL.cache.put(key, blob, settings.cacheLimitGB * 1e9, { taskId, name }).catch(CL.warn);
         return blob;
       });
       entry.done

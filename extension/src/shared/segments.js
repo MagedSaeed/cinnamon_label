@@ -158,10 +158,16 @@
     const len = g.end - g.start;
     const lo = i > 0 ? s[i - 1].end : 0;
     const hi = i + 1 < s.length ? s[i + 1].start : duration != null ? duration : Infinity;
-    const ns = round(Math.min(Math.max(g.start + delta, lo), hi - len));
-    if (!(ns >= lo - EPS) || Math.abs(ns - g.start) < EPS) return null;
+    if (hi - lo < len - EPS) return null;
+    // Round to ms like every edit, but never past a neighbour's edge (which may not be ms-aligned):
+    // at a limit, take that edge exactly.
+    let ns = round(Math.min(Math.max(g.start + delta, lo), hi - len));
+    let ne = round(ns + len);
+    if (ns < lo) [ns, ne] = [lo, lo + len];
+    if (ne > hi) [ns, ne] = [hi - len, hi];
+    if (Math.abs(ns - g.start) < EPS) return null;
     const plan = emptyPlan();
-    plan.update.push({ id, start: ns, end: round(ns + len) });
+    plan.update.push({ id, start: ns, end: ne });
     return plan;
   };
 

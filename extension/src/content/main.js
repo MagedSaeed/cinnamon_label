@@ -123,6 +123,7 @@
 
     async start() {
       this.failed = false;
+      this.adopted = false;
       ui.setTask(this.taskId);
       if (!this.store) this.makeStore();
       ui.setNet({ kind: "checking" });
@@ -305,7 +306,7 @@
       }
       // An unfinished download keeps going in the background and is saved (switching tasks
       // shouldn't throw it away); coming back adopts it again.
-      if (this.dl && !this.blob && !this.dl.aborted && this.runP && !this.failed) CL.prefetch.continueInBackground(this.key, this.taskId, this.name, this.dl, this.runP, settings);
+      if (this.dl && !this.blob && !this.dl.aborted && this.runP && !this.failed) CL.prefetch.continueInBackground(this.key, this.taskId, this.name, this.dl, this.runP, settings, { savesItself: this.adopted });
       else if (this.dl && !this.blob) this.dl.abort();
       if (this.audio) this.audio.close();
       player.reset();
@@ -360,6 +361,8 @@
         s.setAttribute("src", url || s.dataset.clSrc);
         delete s.dataset.clSrc;
       });
+      const rate = m.playbackRate;
+      m.addEventListener("loadedmetadata", () => (m.playbackRate = rate), { once: true }); // load() resets it
       m.load();
     }
   }
@@ -373,8 +376,10 @@
       const at = m.currentTime || 0;
       if (m.hasAttribute("src")) m.setAttribute("src", url);
       m.querySelectorAll("source").forEach((x) => x.hasAttribute("src") && x.setAttribute("src", url));
+      const rate = m.playbackRate;
       m.addEventListener("loadedmetadata", () => {
         if (at) m.currentTime = at;
+        m.playbackRate = rate; // load() resets the speed Label Studio set
       }, { once: true });
       m.load();
     });
@@ -414,6 +419,7 @@
       if (task) {
         task.destroy();
         task = null;
+        dropNativeBlobUrl(); // back to the list: let the video's memory go
       }
     } else if (!task || task.taskId !== st.taskId) {
       if (task) task.destroy();
@@ -600,6 +606,7 @@
     panel.setUi(ui);
     CL.prefetch.setStatusListener((s) => ui && ui.setAhead(s));
     // The open task's own download, for its button in the task list.
+    CL.openMediaKey = () => (task ? task.key : null);
     CL.openDownload = () => (task && task.dl && !task.blob && !task.dl.aborted ? { taskId: task.taskId, loaded: task.dl.loaded, total: task.dl.total } : null);
     CL.taskList.start();
     ui.setCloseUp(!!settings.closeUp);

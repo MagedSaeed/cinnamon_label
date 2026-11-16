@@ -214,6 +214,24 @@ el("deleteAll").addEventListener("click", () => {
   queueDelete(["*"]);
 });
 
+// Is the saved video's task already submitted? Asked from Label Studio (read-only), once per popup.
+const taskStatus = new Map(); // "base|id" -> Promise<"submitted" | "skipped" | "open" | null>
+function statusOf(key, taskId) {
+  const base = key.split("/data/local-files")[0]; // e.g. https://annotation.dlnlp.ai/cinnamon
+  const k = `${base}|${taskId}`;
+  if (!taskStatus.has(k)) {
+    taskStatus.set(
+      k,
+      fetch(`${base}/api/tasks/${taskId}`, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((t) => (!t ? null : t.total_annotations > 0 ? "submitted" : t.cancelled_annotations > 0 ? "skipped" : "open"))
+        .catch(() => null)
+    );
+  }
+  return taskStatus.get(k);
+}
+const STATUS_TEXT = { submitted: "Submitted", skipped: "Skipped", open: "Not submitted" };
+
 async function renderSaved() {
   const { cacheLimitGB } = await chrome.storage.sync.get(DEFAULTS);
   const { clCacheIndex: idx = {} } = await chrome.storage.local.get({ clCacheIndex: {} });
@@ -231,6 +249,16 @@ async function renderSaved() {
     const name = document.createElement("p");
     name.className = "name";
     name.textContent = v.taskId != null ? `Task ${v.taskId}` : "Video";
+    if (v.taskId != null) {
+      const badge = document.createElement("span");
+      badge.className = "status";
+      name.append(" ", badge);
+      statusOf(key, v.taskId).then((st) => {
+        if (!st) return;
+        badge.textContent = STATUS_TEXT[st];
+        badge.dataset.s = st;
+      });
+    }
     const file = document.createElement("span");
     file.className = "file";
     file.textContent = `${v.name || key}, opened ${ago(v.used)}`;
@@ -242,7 +270,7 @@ async function renderSaved() {
     del.className = "link danger del";
     del.type = "button";
     del.textContent = "Delete";
-    del.setAttribute("aria-label", `Delete the saved video of ${name.textContent}`);
+    del.setAttribute("aria-label", `Delete the saved video of task ${v.taskId ?? ""}`);
     del.addEventListener("click", () => queueDelete([key]));
     li.append(name, size, file, del);
     list.appendChild(li);

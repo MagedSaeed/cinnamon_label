@@ -426,6 +426,7 @@
         case "applyPlan":
           return reply(m.id, true, applyPlan(m.args.plan));
         case "setField":
+          keepDraftsPaused(); // before the change, so no draft save is scheduled
           return reply(m.id, true, setField(m.args));
         case "select":
           return reply(m.id, true, selectSegment(m.args));
@@ -436,6 +437,7 @@
           return reply(m.id, true, { canUndo: !!(a && a.history && a.history.canUndo), canRedo: !!(a && a.history && a.history.canRedo) });
         }
         case "setTaskField":
+          keepDraftsPaused(); // before the change, so no draft save is scheduled
           return reply(m.id, true, setTaskField(m.args));
         case "config": {
           const c = window.Htx && window.Htx.config;
