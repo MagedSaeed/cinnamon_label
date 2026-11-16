@@ -9,7 +9,8 @@
 
   const C = {
     bg: "#ffffff",
-    wave: "#b3bac5",
+    wave: "#c8cdd5", // between segments: light, recedes
+    waveSeg: "#858d9b", // inside a segment: darker
     played: "#3d4452",
     center: "#d9dde3",
     accent: "#8a4b2a",
@@ -18,7 +19,7 @@
     tick: "#d9dde3",
     hover: "rgba(29,33,41,0.35)",
     text: "#5d6573",
-    segFill: "rgba(61,68,82,0.07)",
+    segFill: "rgba(61,68,82,0.13)",
     segSelFill: "rgba(138,75,42,0.13)",
     segNewFill: "rgba(138,75,42,0.18)",
     segEdge: "#7d8594",
@@ -380,6 +381,13 @@
     _wave(ctx, x0, w, top, h, t0, span, playX, gain, sel) {
       const mid = top + h / 2;
       const amp = (h / 2) * gain;
+      // Which pixels lie inside a segment: segments are darker, the gaps between them recede.
+      const mask = new Uint8Array(w);
+      for (const g of this.segs) {
+        const a = Math.max(0, Math.floor(((g.start - t0) / span) * w));
+        const b = Math.min(w, Math.ceil(((g.end - t0) / span) * w));
+        for (let i = a; i < b; i++) mask[i] = 1;
+      }
       ctx.fillStyle = C.center;
       ctx.fillRect(x0, Math.round(mid), w, 1);
       for (let x = 0; x < w; x++) {
@@ -389,7 +397,8 @@
         const y1 = mid - Math.max(-1, r[0]) * amp;
         const px = x0 + x;
         const inSel = sel && px >= sel[0] && px < sel[1];
-        ctx.fillStyle = px < playX ? (inSel ? C.playedSel : C.played) : inSel ? C.waveSel : C.wave;
+        const inSeg = !inSel && mask[x] === 1;
+        ctx.fillStyle = px < playX ? (inSel ? C.playedSel : C.played) : inSel ? C.waveSel : inSeg ? C.waveSeg : C.wave;
         ctx.fillRect(px, y0, 1, Math.max(1, y1 - y0));
       }
     }
