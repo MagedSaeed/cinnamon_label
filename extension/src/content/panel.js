@@ -73,9 +73,9 @@
 .card.open .ch .chev{transform:rotate(180deg)}
 .ch .sub{grid-column:2 / -1; display:flex; flex-wrap:wrap; gap:4px; margin-top:2px}
 .ch .sub .tag{padding:1px 7px; border:1px solid var(--line); border-radius:999px; background:#f3f4f6; color:#3d4452; font-size:12px; line-height:1.5; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.card.skipped{background:#fafbfc}
-.card.skipped:not(.open) .ch, .card.skipped:not(.open) .cplay{opacity:.82}
-.card.skipped .ch .mini{filter:grayscale(1)}
+/* Skipped: full strength (still clickable), marked by faint diagonal stripes and a dashed skip tag. */
+.card.skipped{background:repeating-linear-gradient(135deg, #fff 0 9px, #f9fafb 9px 18px)}
+.card.skipped .ch .sub .tag[data-k="skip"]{border-style:dashed; background:#fff}
 .ch .sub .tag[data-k="m"]{background:#e7f0fb; border-color:#b9d3f1; color:#1f4f8a; font-weight:600}
 .ch .sub .tag[data-k="f"]{background:#fbe9f1; border-color:#f0bfd4; color:#8a2554; font-weight:600}
 .ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
@@ -836,6 +836,7 @@
                 const k = String(x.text).trim().toLowerCase();
                 if (/^(male|man|ذكر)$/.test(k)) tag.dataset.k = "m";
                 else if (/^(female|woman|أنثى|انثى)$/.test(k)) tag.dataset.k = "f";
+                else if (/^skip\b/.test(k)) tag.dataset.k = "skip";
                 tag.textContent = x.text;
                 tag.title = x.q;
                 return tag;
