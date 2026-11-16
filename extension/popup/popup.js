@@ -215,7 +215,7 @@ el("deleteAll").addEventListener("click", () => {
 });
 
 // Is the saved video's task already submitted? Asked from Label Studio (read-only), once per popup.
-const taskStatus = new Map(); // "base|id" -> Promise<"submitted" | "skipped" | "open" | null>
+const taskStatus = new Map(); // "base|id" -> Promise<{ status: "submitted" | "skipped" | "open", url } | null>
 function statusOf(key, taskId) {
   const base = key.split("/data/local-files")[0]; // e.g. https://annotation.dlnlp.ai/cinnamon
   const k = `${base}|${taskId}`;
@@ -224,7 +224,14 @@ function statusOf(key, taskId) {
       k,
       fetch(`${base}/api/tasks/${taskId}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : null))
-        .then((t) => (!t ? null : t.total_annotations > 0 ? "submitted" : t.cancelled_annotations > 0 ? "skipped" : "open"))
+        .then((t) =>
+          !t
+            ? null
+            : {
+                status: t.total_annotations > 0 ? "submitted" : t.cancelled_annotations > 0 ? "skipped" : "open",
+                url: t.project != null ? `${base}/projects/${t.project}/data?task=${taskId}` : null,
+              }
+        )
         .catch(() => null)
     );
   }
@@ -253,10 +260,22 @@ async function renderSaved() {
       const badge = document.createElement("span");
       badge.className = "status";
       name.append(" ", badge);
-      statusOf(key, v.taskId).then((st) => {
-        if (!st) return;
-        badge.textContent = STATUS_TEXT[st];
-        badge.dataset.s = st;
+      statusOf(key, v.taskId).then((info) => {
+        if (!info) return;
+        badge.textContent = STATUS_TEXT[info.status];
+        badge.dataset.s = info.status;
+        if (!info.url) return;
+        // The task name opens the task in a new tab.
+        const a = document.createElement("a");
+        a.className = "task";
+        a.href = info.url;
+        a.textContent = `Task ${v.taskId}`;
+        a.title = "Open this task in a new tab";
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: info.url });
+        });
+        name.firstChild.replaceWith(a);
       });
     }
     const file = document.createElement("span");
