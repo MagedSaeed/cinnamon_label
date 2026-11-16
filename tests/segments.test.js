@@ -137,3 +137,13 @@ test("shift stops exactly at neighbours whose edges are not ms-aligned", () => {
   assert.deepEqual(S.validate(S.apply(base, right), 20), []);
   assert.ok(Math.abs(right.update[0].end - 9.0006) < 1e-9);
 });
+
+test("split leaves a gap centred on the playhead", () => {
+  const base = [{ id: "a", start: 10, end: 20 }];
+  const p = S.split(base, "a", 15, 0.1);
+  assert.deepEqual(p.update, [{ id: "a", start: 10, end: 14.95 }]);
+  assert.deepEqual(p.create, [{ start: 15.05, end: 20 }]);
+  assert.deepEqual(S.validate(S.apply(base, p), 30), []);
+  assert.equal(S.split(base, "a", 10.1, 0.1), null); // first part would be too short
+  assert.deepEqual(S.split(base, "a", 15).create, [{ start: 15, end: 20 }]); // no gap
+});

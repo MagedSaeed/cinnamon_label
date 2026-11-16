@@ -134,7 +134,7 @@
   const EMPTY = "No segments yet. Use Add segment while it plays, drag across the waveform, or Presegment.";
 
   // container: the side panel; bar: the segment toolbar element above the waveform.
-  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment, nudgeMs = () => 50, nudgeShiftMs = () => 250 }) {
+  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment, nudgeMs = () => 50, nudgeShiftMs = () => 250, splitGapMs = () => 100 }) {
     let store = null;
     let presegBusy = false;
     let form = null;
@@ -251,7 +251,7 @@
       if (marking) $("aAdd").disabled = !editable() || t <= marking.start + S.MIN_DUR;
       // "Split at playhead" only when the playhead is inside the selected segment (not at its edges).
       const g = sel();
-      if (g) $("aSplit").disabled = !editable() || !S.split(base(), g.id, t);
+      if (g) $("aSplit").disabled = !editable() || !S.split(base(), g.id, t, splitGapMs() / 1000);
     }
     for (const ev of ["timeupdate", "seeked"]) CL.on(player.v, ev, paintMarkEnd);
     CL.on($("aUnsel"), "click", () => store && store.select(null));
@@ -357,7 +357,7 @@
       if (!g) return;
       const t = player.v.currentTime || 0;
       if (t <= g.start || t >= g.end) return flash("Move the playhead inside this segment first.", true);
-      const plan = S.split(base(), g.id, t);
+      const plan = S.split(base(), g.id, t, splitGapMs() / 1000);
       if (!plan) return flash("Too close to the segment's edge to split.", true);
       await store.apply(plan, { select: g.id }); // the new segment starts with no answers
       flash("Split. The new segment starts with no answers.");

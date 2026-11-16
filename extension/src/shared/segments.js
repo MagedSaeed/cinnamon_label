@@ -167,15 +167,18 @@
     return plan;
   };
 
-  // Split at t: the segment keeps [start, t], a new one gets [t, end].
-  S.split = function split(segs, id, t) {
+  // Split at t, leaving a gap of `gap` seconds centred on t: the segment keeps [start, t - gap/2],
+  // a new one gets [t + gap/2, end]. Each part must stay at least MIN_DUR long.
+  S.split = function split(segs, id, t, gap = 0) {
     const g = segs.find((x) => x.id === id);
     if (!g) return null;
-    const tt = round(t);
-    if (tt - g.start < MIN_DUR || g.end - tt < MIN_DUR) return null;
+    const h = Math.max(0, gap) / 2;
+    const a = round(t - h);
+    const b = round(t + h);
+    if (a - g.start < MIN_DUR || g.end - b < MIN_DUR) return null;
     const plan = emptyPlan();
-    plan.update.push({ id, start: g.start, end: tt });
-    plan.create.push({ start: tt, end: g.end });
+    plan.update.push({ id, start: g.start, end: a });
+    plan.create.push({ start: b, end: g.end });
     return plan;
   };
 

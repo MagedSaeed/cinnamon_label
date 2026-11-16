@@ -26,7 +26,7 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
   - Drag a segment's edge to move it. Segments are always separate: only that segment changes, and an edge stops at its neighbour's edge instead of pushing it. Shift turns snapping off.
   - Fine-tune start and end with the − / + buttons or by typing a time.
   - **Split at playhead**, **Merge with next**, **Delete**, **Undo** and **Redo** are in the toolbar.
-  - Segments never overlap. A split segment starts with empty answers; merging keeps the first segment's answers and joins the transcripts.
+  - Segments never overlap. **Split at playhead** leaves a small gap (100 ms by default, set in the popup) and the new part starts with empty answers; merging keeps the first segment's answers and joins the transcripts.
 - **Questions and transcript:** the open segment's card shows its questions and the transcript box. The whole-video questions are at the top of the side panel. Help notes from the project are at the end of the form.
 - **Presegment:** suggests segments, drawn dashed with speaker tags. Click one to add it, or use **Add all** / **Dismiss**. Nothing is added until you accept it.
 - **Task list:** each row has a small button: ↓ downloads that task's video now, ✓ means it is saved (click to download again), and a percentage shows a running download (click to stop).
@@ -49,7 +49,7 @@ Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left t
   - stop Label Studio's draft auto-save;
   - parallel connections (1–4);
   - download the next 1 or 2 tasks ahead;
-  - editing options: the close-up waveform, moving whole segments by dragging their middle, and the nudge steps for the − / + buttons;
+  - editing options: the close-up waveform, moving whole segments by dragging their middle, the nudge steps for the − / + buttons, and the split gap;
   - reload on code changes (for development only).
 - **Saved videos:** see what is saved and how much space it uses; delete one or all. The oldest are removed automatically above the size limit.
 - **Presegmentation:**

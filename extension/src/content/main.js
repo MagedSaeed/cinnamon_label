@@ -602,6 +602,7 @@
       presegment: runPreseg,
       nudgeMs: () => (settings && settings.nudgeMs) || 50,
       nudgeShiftMs: () => (settings && settings.nudgeShiftMs) || 250,
+      splitGapMs: () => (settings && settings.splitGapMs != null ? settings.splitGapMs : 100),
     });
     panel.setUi(ui);
     CL.prefetch.setStatusListener((s) => ui && ui.setAhead(s));

@@ -13,6 +13,7 @@ const DEFAULTS = {
   moveSegments: false,
   nudgeMs: 50,
   nudgeShiftMs: 250,
+  splitGapMs: 100,
   psServer: "http://127.0.0.1:8000",
   psProvider: "local",
   psRemoveMusic: false,
@@ -65,6 +66,7 @@ function write(s) {
   el("cacheLimitGB").value = String(s.cacheLimitGB);
   if (document.activeElement !== el("nudgeMs")) el("nudgeMs").value = String(s.nudgeMs);
   if (document.activeElement !== el("nudgeShiftMs")) el("nudgeShiftMs").value = String(s.nudgeShiftMs);
+  if (document.activeElement !== el("splitGapMs")) el("splitGapMs").value = String(s.splitGapMs);
   el("status").dataset.state = s.enabled ? "ok" : "off";
   el("statusText").textContent = s.enabled ? "Active" : "Off";
   // presegmentation
@@ -86,6 +88,7 @@ function read() {
     cacheLimitGB: Number(el("cacheLimitGB").value) || DEFAULTS.cacheLimitGB,
     nudgeMs: Math.max(1, Math.min(2000, Math.round(Number(el("nudgeMs").value)))) || DEFAULTS.nudgeMs,
     nudgeShiftMs: Math.max(1, Math.min(5000, Math.round(Number(el("nudgeShiftMs").value)))) || DEFAULTS.nudgeShiftMs,
+    splitGapMs: Number.isFinite(Number(el("splitGapMs").value)) && el("splitGapMs").value !== "" ? Math.max(0, Math.min(2000, Math.round(Number(el("splitGapMs").value)))) : DEFAULTS.splitGapMs,
     psServer: el("psServer").value.trim() || DEFAULTS.psServer,
     psProvider: document.querySelector("input[name=psProvider]:checked")?.value || DEFAULTS.psProvider,
     psRemoveMusic: el("psRemoveMusic").checked,

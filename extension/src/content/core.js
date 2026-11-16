@@ -20,6 +20,7 @@
     moveSegments: false, // drag a segment's middle to slide the whole segment (off: only edges move) // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
     nudgeMs: 50, // the -/+ buttons beside a segment's start and end
     nudgeShiftMs: 250, // the same buttons with Shift held
+    splitGapMs: 100, // gap left between the two parts of a split, centred on the playhead
     psServer: "http://127.0.0.1:8000",
     psProvider: "local",
     psRemoveMusic: false,
