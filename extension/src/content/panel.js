@@ -85,8 +85,11 @@
 .ch .sub .tag[data-d="5"]{--dc:#6e2f6e; --db:#f4e7f4; --dl:#dbb6db}
 .ch .sub .tag[data-d="6"]{--dc:#3f4d63; --db:#e9edf3; --dl:#bcc6d6}
 .ch .sub .tag[data-d="7"]{--dc:#7a4a3a; --db:#f5ebe6; --dl:#dfc1b5}
-.ch .sub .tag[data-d]{color:var(--dc); background:var(--db); border-color:var(--dl)}
-.ch .sub .tag[data-d][data-alt]{background:#fff; font-weight:500}
+/* the main dialect: solid; the alternatives: dashed outline, after a small "also" */
+.ch .sub .tag[data-d]{color:#fff; background:var(--dc); border-color:var(--dc); font-size:13px; padding:1px 10px}
+.ch .sub .tag[data-d][data-alt]{color:var(--dc); background:#fff; border:1px dashed var(--dl); font-weight:500; font-size:11px; padding:0 6px; align-self:center}
+.ch .sub .qsep{align-self:center; width:1px; height:16px; margin:0 4px; background:#c3c9d2}
+.ch .sub .also{align-self:center; margin:0 -1px 0 2px; color:var(--faint); font-size:11.5px; font-style:italic}
 .ch .sub .tag[data-k="m"]{background:#e7f0fb; border-color:#b9d3f1; color:#1f4f8a; font-weight:600}
 .ch .sub .tag[data-k="f"]{background:#fbe9f1; border-color:#f0bfd4; color:#8a2554; font-weight:600}
 .ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; /* the whole transcript, for reviewing */
@@ -853,8 +856,22 @@
           const sig = sm.tags.map((x) => x.q + "=" + x.text).join("|");
           if (c.sub.dataset.sig !== sig) {
             c.sub.dataset.sig = sig;
+            let alsoShown = false;
+            let prevGroup = null;
             c.sub.replaceChildren(
-              ...sm.tags.map((x) => {
+              ...sm.tags.flatMap((x) => {
+                // A thin line between answers to different questions (the dialect alternatives
+                // belong with the main dialect).
+                const group = String(x.name || x.q).replace(/_alt(_\d+)?$/i, "");
+                const sep = prevGroup !== null && group !== prevGroup;
+                prevGroup = group;
+                const lead = [];
+                if (sep) {
+                  const bar = document.createElement("span");
+                  bar.className = "qsep";
+                  bar.setAttribute("aria-hidden", "true");
+                  lead.push(bar);
+                }
                 const tag = document.createElement("span");
                 tag.className = "tag";
                 // Speaker gender matters most: its own colour, whatever the project calls it.
@@ -870,7 +887,15 @@
                 }
                 tag.textContent = x.text;
                 tag.title = x.q;
-                return tag;
+                // The alternatives read as "also …", after the main dialect.
+                if (tag.dataset.alt && !alsoShown) {
+                  alsoShown = true;
+                  const also = document.createElement("span");
+                  also.className = "also";
+                  also.textContent = "also";
+                  return [...lead, also, tag];
+                }
+                return [...lead, tag];
               })
             );
           }
