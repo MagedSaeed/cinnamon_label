@@ -42,7 +42,8 @@ video{display:block; width:auto; height:auto; max-width:100%; max-height:100%; b
 video:not([data-ready]){visibility:hidden}
 .stage .msg{position:absolute; inset:auto 0 16px; text-align:center; color:var(--muted); font-size:13px; pointer-events:none}
 .side{border-left:1px solid var(--line); background:var(--surface); padding:18px; overflow:auto}
-.side{display:flex; flex-direction:column}
+.side{display:flex; flex-direction:column; min-height:0; min-width:0}
+.stage{min-height:0}
 .sync{display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:var(--muted); font-size:13px}
 .sync i{width:8px; height:8px; border-radius:50%; background:#c4cad3}
 .sync[data-state="synced"] i{background:var(--ok)}
@@ -100,7 +101,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
     host.id = "cinnamon-label-root";
     host.style.cssText = "position:fixed;z-index:30;display:none;left:0;top:0;width:0;height:0";
     const root = host.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>${CSS}${CL.PANEL_CSS || ""}</style>`;
+    root.innerHTML = `<style>${CSS}${CL.PANEL_CSS || ""}${CL.FORM_CSS || ""}</style>`;
     const app = el(`
       <div class="app">
         <header class="bar">
@@ -155,7 +156,13 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
     const place = () => {
       if (!anchor || !anchor.isConnected) return;
       const r = anchor.getBoundingClientRect();
-      if (visible) Object.assign(host.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+      // Label Studio's editor area grows with its own (hidden) content; stop at its bottom bar
+      // (where Submit is) or the window edge, so our editor always fits on screen.
+      const bar = document.querySelector(".lsf-bottombar");
+      const barTop = bar ? bar.getBoundingClientRect().top : Infinity;
+      const bottom = Math.min(window.innerHeight, barTop > r.top ? barTop : Infinity, r.bottom);
+      const height = Math.max(240, bottom - Math.max(0, r.top));
+      if (visible) Object.assign(host.style, { left: r.left + "px", top: Math.max(0, r.top) + "px", width: r.width + "px", height: height + "px" });
       if (pillVisible) Object.assign(pill.style, { left: r.left + 16 + "px", top: r.bottom - 52 + "px" });
     };
     const ro = new ResizeObserver(() => place());
@@ -168,27 +175,18 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
       side: $("side"),
       // store: SegmentStore or null
       setSync(store) {
+        // Quiet when everything is fine; speaks up only for a failed write or a read-only annotation.
         const elx = $("sync");
-        if (!store || !store.supported) {
-          elx.textContent = "";
-          return;
-        }
-        const st = store.readOnly ? "readonly" : store.status;
+        const st = !store || !store.supported ? "" : store.readOnly ? "readonly" : store.status === "error" ? "error" : "";
         elx.dataset.state = st;
-        const text =
-          st === "readonly"
-            ? "Read-only"
-            : st === "pending"
-              ? "Writing to Label Studio…"
-              : st === "error"
-                ? "Last edit not in Label Studio"
-                : "All edits in Label Studio";
+        elx.textContent = "";
+        if (!st) return;
         elx.innerHTML = "<i></i>";
-        elx.append(text);
+        elx.append(st === "readonly" ? "Read-only" : "Last edit not in Label Studio");
         elx.title =
           st === "error"
             ? `The last edit did not reach Label Studio (${store.error}). The view now shows what Label Studio has; redo the edit if it's missing.`
-            : "Your segments and answers are kept in Label Studio's annotation. Nothing is submitted until you press Submit.";
+            : "This annotation can be viewed but not edited.";
       },
       get visible() {
         return visible;

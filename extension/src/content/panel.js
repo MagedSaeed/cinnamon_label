@@ -44,6 +44,15 @@ li.sel .n{background:var(--cinnamon)}
 .note.err{color:var(--err)}
 .restore{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border-radius:8px; background:var(--cinnamon-soft); border:1px solid #e6cfc2}
 .restore span{flex:1; min-width:200px}
+.whole{display:flex; flex-direction:column; gap:6px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--panel)}
+.whole .links{display:flex; gap:8px; flex-wrap:wrap}
+.whole .links a{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--line); border-radius:6px; color:var(--ink); text-decoration:none; font-size:13px}
+.whole .links a:hover{border-color:#c9ced6}
+.row .ok{color:var(--ok); font-size:12px}
+.row .miss{color:var(--cinnamon); font-size:12px; white-space:nowrap}
+.row{grid-template-columns:28px 1fr auto auto}
+.skipnote{margin:0; padding:10px 12px; border-radius:8px; background:var(--surface); border:1px solid var(--line); color:var(--muted)}
+.missing{margin:0; font-size:12.5px; color:var(--cinnamon)}
 .ro{margin:0; padding:8px 10px; border-radius:6px; background:var(--surface); color:var(--muted); border:1px solid var(--line)}
 `;
 
@@ -66,12 +75,21 @@ li.sel .n{background:var(--cinnamon)}
 
   CL.createPanel = function createPanel(container, { player, timeline, textFields, onSelect }) {
     let store = null;
+    let form = null; // CLConfig.buildForm result
+    let taskView = null;
+    let segView = null;
+    let focusNext = false; // focus the transcript after the next selection made from the panel
     let note = "";
     let noteErr = false;
     let history = { canUndo: false, canRedo: false };
     const S = globalThis.CLSeg;
     container.innerHTML = `
       <div class="panel">
+        <section class="whole" id="whole" hidden>
+          <div class="links" id="links"></div>
+          <div id="taskForm"></div>
+        </section>
+        <p class="skipnote" id="skipNote" hidden>This video is marked to skip as a whole, so segments are not part of the answer (Label Studio leaves them out). Untick it to work on segments.</p>
         <div class="ph">
           <h2>Segments <span class="count" id="segCount"></span></h2>
           <div class="undo">
@@ -100,6 +118,7 @@ li.sel .n{background:var(--cinnamon)}
             <button class="btn danger" id="aDel">${I.del}Delete</button>
           </div>
           <p class="note" id="dNote"></p>
+          <p class="missing" id="dMissing"></p>
           <div id="form"></div>
         </section>
         <p class="ro" id="readOnly" hidden>This annotation is read-only. You can play and review it, but not edit it.</p>
@@ -127,6 +146,7 @@ li.sel .n{background:var(--cinnamon)}
     CL.on($("segList"), "click", (e) => {
       const li = e.target.closest("li[data-id]");
       if (!li) return;
+      focusNext = true; // put the cursor in the transcript once this segment's form is shown
       store.select(li.dataset.id);
       const g = store.byId(li.dataset.id);
       if (g) {
@@ -226,10 +246,11 @@ li.sel .n{background:var(--cinnamon)}
       refreshHistory();
     });
     let flashTimer;
+    let emptyText = "No segments yet. Drag across the waveform below to mark one.";
     const flash = (t) => {
       $("segEmpty").textContent = t;
       clearTimeout(flashTimer);
-      flashTimer = setTimeout(() => ($("segEmpty").textContent = "No segments yet. Drag across the waveform below to mark one."), 4000);
+      flashTimer = setTimeout(() => ($("segEmpty").textContent = emptyText), 4000);
       setNote(t);
     };
 
@@ -258,9 +279,61 @@ li.sel .n{background:var(--cinnamon)}
       await backup.discard();
     });
 
+    // ---- forms (from the labeling config) ----
+    const CFG = globalThis.CLConfig;
+    const values = (g) => ({ ...((store && store.taskFields) || {}), ...((g && g.fields) || {}) });
+    const segmentsHidden = () => !!(form && store && !CFG.isVisible({ when: form.segmentLabelsWhen }, store.taskFields || {}));
+    const missingFor = (g) => (form ? CFG.missing(form.segment, values(g)) : []);
+    function goNext() {
+      const g = sel();
+      if (!g) return;
+      const nx = globalThis.CLSeg.neighbour(store.segments, g.id, 1);
+      if (!nx) return setNote("This is the last segment.");
+      store.flushTexts();
+      focusNext = true;
+      store.select(nx.id);
+      player.seekTo(nx.start);
+      timeline.revealSegment(nx);
+    }
+
     // ---- render ----
     let lastListSig = "";
+    let lastScrolledTo = null;
     const api = {
+      setForm(f) {
+        form = f;
+        const links = $("links");
+        links.textContent = "";
+        for (const l of (f && f.links) || []) {
+          const a = document.createElement("a");
+          a.href = l.href;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = l.text;
+          links.appendChild(a);
+        }
+        links.hidden = !links.children.length;
+        const taskFields = (f && f.task.filter((i) => i.kind === "choices" || i.kind === "textarea")) || [];
+        $("whole").hidden = !links.children.length && !taskFields.length;
+        taskView = f && f.task.length ? new CL.FormView($("taskForm"), { items: f.task, onChange: (name, v, o) => store && store.setField(null, name, v, o) }) : null;
+        emptyText = ["No segments yet. Drag across the waveform below to mark one."].concat((f && f.segmentHelp) || []).join(" ");
+        $("segEmpty").textContent = emptyText;
+        segView = f
+          ? new CL.FormView($("form"), {
+              items: f.segment,
+              onChange: (name, v, o) => store && store.selected && store.setField(store.selected, name, v, o),
+              extras: {
+                onReplay: () => {
+                  const g = sel();
+                  if (g) player.playRange(g.start, g.end);
+                },
+                onNext: goNext,
+                onBlur: () => store && store.flushTexts(),
+              },
+            })
+          : null;
+        api.render();
+      },
       setBackup(b) {
         backup = b;
         api.showOffer(b ? b.offer : null);
@@ -285,7 +358,8 @@ li.sel .n{background:var(--cinnamon)}
         $("readOnly").hidden = !(store && store.readOnly);
         $("segEmpty").hidden = segs.length > 0;
         // list (rebuilt only when it changed, so scrolling and clicks aren't disturbed)
-        const sig = segs.map((g) => `${g.id}:${g.start}:${g.end}`).join("|") + "#" + (store && store.selected);
+        const miss = segs.map((g) => missingFor(g));
+        const sig = segs.map((g, i) => `${g.id}:${g.start}:${g.end}:${miss[i].join(",")}`).join("|") + "#" + (store && store.selected);
         if (sig !== lastListSig) {
           lastListSig = sig;
           const ol = $("segList");
@@ -294,12 +368,27 @@ li.sel .n{background:var(--cinnamon)}
             const li = document.createElement("li");
             li.dataset.id = g.id;
             if (store.selected === g.id) li.className = "sel";
-            li.innerHTML = `<button class="row"><span class="n">${i + 1}</span><span class="t">${U.fmtClock(g.start)} – ${U.fmtClock(g.end)}</span><span class="d">${fmtDur(g.end - g.start)}</span></button>`;
+            li.innerHTML = `<button class="row"><span class="n">${i + 1}</span><span class="t">${U.fmtClock(g.start)} – ${U.fmtClock(g.end)}</span><span class="d">${fmtDur(g.end - g.start)}</span><span></span></button>`;
+            if (form) {
+              const st = li.querySelector(".row > span:last-child");
+              if (miss[i].length) {
+                st.className = "miss";
+                st.textContent = `⚠ ${miss[i].length}`;
+                st.title = "Missing: " + miss[i].join(", ");
+              } else {
+                st.className = "ok";
+                st.textContent = "✓";
+                st.title = "Complete";
+              }
+            }
             ol.appendChild(li);
           });
           ol.hidden = !segs.length;
+          // Bring the selected row into view only when the selection changed (not on every update,
+          // which would yank the panel while typing below).
           const cur = ol.querySelector("li.sel");
-          if (cur) cur.scrollIntoView({ block: "nearest" });
+          if (cur && store.selected !== lastScrolledTo) cur.scrollIntoView({ block: "nearest" });
+          lastScrolledTo = store.selected;
         }
         // detail
         const g = sel();
@@ -315,7 +404,19 @@ li.sel .n{background:var(--cinnamon)}
           for (const id of ["dStart", "dEnd"]) $(id).disabled = ro;
           for (const id of ["aSplit", "aMerge", "aDel"]) $(id).disabled = ro;
           $("aMerge").disabled = ro || i === segs.length - 1;
+          const m = missingFor(g);
+          $("dMissing").textContent = form && m.length ? "Still needed: " + m.join(", ") : "";
+          if (segView) segView.render(g.id, values(g), { readOnly: ro });
+          if (focusNext) {
+            focusNext = false;
+            const tx = segView && segView.firstBigText();
+            if (tx && !ro) tx.focus({ preventScroll: false });
+          }
         }
+        if (taskView) taskView.render("task", values(null), { readOnly: !store || store.readOnly });
+        const hiddenSegs = segmentsHidden();
+        $("skipNote").hidden = !hiddenSegs;
+        timeline.segmentsDisabled = hiddenSegs;
         refreshHistory();
       },
       form: () => $("form"),

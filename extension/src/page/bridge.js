@@ -159,7 +159,16 @@
       })
       .sort((p, q) => p.start - q.start);
     const sel = a.regions.find((r) => r.selected);
+    // Whole-task answers (not tied to a segment), e.g. "Skip entire video".
+    const taskFields = {};
+    for (const x of a.results || []) {
+      const tag = x.from_name;
+      if (!tag || tag.perregion || tag === tags.labels || (x.area && x.area.start != null)) continue;
+      const v = x.value && x.value[tag.valueType];
+      taskFields[tag.name] = v && v.toJSON ? v.toJSON() : v;
+    }
     return {
+      taskFields,
       ready: true,
       supported: true,
       readOnly: !!(a.readonly || (typeof a.isReadOnly === "function" && a.isReadOnly())),
@@ -260,6 +269,35 @@
     const r = findRegion(a, tags, id);
     if (!r) throw new Error(`Segment ${id} no longer exists.`);
     setFieldOn(a, r, name, value);
+    return { state: readSegments() };
+  }
+
+  // Whole-task field. value: array (choices) or string (text); empty clears it.
+  function setTaskField({ name, value }) {
+    const a = ann();
+    guardWritable(a);
+    const tag = a.names.get(name);
+    if (!tag || tag.perregion) throw new Error(`"${name}" is not a whole-task field.`);
+    const h = a.history;
+    if (h && h.freeze) h.freeze("cinnamon-label-task");
+    try {
+      if (/choices/i.test(tag.type)) {
+        const want = new Set(Array.isArray(value) ? value : value ? [value] : []);
+        const kids = (tag.children || []).filter((c) => c.toggleSelected);
+        const key = (c) => (c.alias != null && c.alias !== "" ? c.alias : c.value);
+        for (const c of kids) if (c.sel && !want.has(key(c))) c.toggleSelected(); // unselect first
+        for (const c of kids) if (!c.sel && want.has(key(c))) c.toggleSelected();
+      } else if (/textarea/i.test(tag.type)) {
+        const text = Array.isArray(value) ? value.join("") : value == null ? "" : String(value);
+        const res = (a.results || []).find((x) => x.from_name === tag);
+        if (!text) {
+          if (res && res.area) res.area.removeResult(res);
+        } else if (res) res.setValue([text]);
+        else tag.addText(text); // creates the answer (addText appends, so only when there is none)
+      } else throw new Error(`"${name}" can't be edited here.`);
+    } finally {
+      if (h && h.unfreeze) h.unfreeze("cinnamon-label-task");
+    }
     return { state: readSegments() };
   }
 
@@ -374,6 +412,12 @@
           const a = ann();
           if (a && typeof a[m.op] === "function") a[m.op](); // Label Studio's own history
           return reply(m.id, true, { canUndo: !!(a && a.history && a.history.canUndo), canRedo: !!(a && a.history && a.history.canRedo) });
+        }
+        case "setTaskField":
+          return reply(m.id, true, setTaskField(m.args));
+        case "config": {
+          const c = window.Htx && window.Htx.config;
+          return reply(m.id, true, typeof c === "string" ? c : null);
         }
         case "serialize":
           return reply(m.id, true, serialize());

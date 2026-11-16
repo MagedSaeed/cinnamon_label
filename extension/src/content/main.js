@@ -67,6 +67,22 @@
     }
   }
 
+  // ---------- the labeling config -> forms (once per project) ----------
+  let formFor = null;
+  async function ensureForm() {
+    const project = (location.pathname.match(/\/projects\/(\d+)/) || [])[1] || "";
+    if (formFor === project) return;
+    const xml = await CL.page("config").catch(() => null);
+    if (!xml) return; // not ready yet; tried again on the next task change
+    formFor = project;
+    try {
+      panel.setForm(globalThis.CLConfig.buildForm(xml));
+    } catch (e) {
+      CL.warn("Could not read the labeling config; the forms are off.", e);
+      panel.setForm(null);
+    }
+  }
+
   // ---------- one task ----------
   class Task {
     constructor(st) {
@@ -95,6 +111,7 @@
       });
       ui.timeline.setStore(this.store);
       panel.setStore(this.store);
+      ensureForm().catch(CL.warn);
       ui.setSync(this.store);
       this.store.refresh().catch(CL.warn);
       // Local backup of this annotation (the server refuses drafts).
@@ -401,18 +418,32 @@
     }
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && holdSubmitIfDirty(e)) return;
     if (!ui.visible || !task) return;
-    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || CL.isTypingTarget(t)) return;
-    if (e.code === "Space") {
-      if (!e.repeat) player.toggle();
-      swallowSpaceUp = true;
-    } else if (e.code === "ArrowLeft") player.seekBy(-5);
-    else if (e.code === "ArrowRight") player.seekBy(5);
-    else return;
-    e.preventDefault();
-    e.stopImmediatePropagation(); // keep Label Studio's own hotkeys from also reacting
+    if (CL.isTypingTarget(t)) return; // typing in Label Studio's own fields (side panels)
+    const onOurs = inOverlay(e) || t === document.body || t === document.documentElement;
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      let handled = true;
+      if (e.code === "Space") {
+        if (!e.repeat) player.toggle();
+        swallowSpaceUp = true;
+      } else if (e.code === "ArrowLeft") player.seekBy(-5);
+      else if (e.code === "ArrowRight") player.seekBy(5);
+      else handled = false;
+      if (handled) {
+        e.preventDefault();
+        e.stopImmediatePropagation(); // keep Label Studio's own hotkeys from also reacting
+        return;
+      }
+    }
+    // Label Studio's single-key hotkeys act on its hidden UI (Backspace deletes the selected segment,
+    // letters change labels...). In our editor they'd destroy work silently, so they stay out.
+    // Ctrl/Cmd combinations (undo/redo, Submit) still reach Label Studio.
+    if (onOurs && !e.ctrlKey && !e.metaKey) e.stopImmediatePropagation();
   }
   function onKeyUp(e) {
     if (inOverlay(e) && CL.isTypingTarget(target(e))) return e.stopImmediatePropagation();
+    const t = target(e);
+    if (ui && ui.visible && !e.ctrlKey && !e.metaKey && (inOverlay(e) || t === document.body || t === document.documentElement) && e.code !== "Space")
+      e.stopImmediatePropagation();
     if (e.code === "Space" && swallowSpaceUp) {
       swallowSpaceUp = false;
       e.preventDefault(); // a focused button would otherwise "click" on Space release
@@ -420,7 +451,9 @@
     }
   }
   function onKeyPress(e) {
-    if (inOverlay(e) && CL.isTypingTarget(target(e))) e.stopImmediatePropagation();
+    const t = target(e);
+    if (inOverlay(e) && CL.isTypingTarget(t)) return e.stopImmediatePropagation();
+    if (ui && ui.visible && !e.ctrlKey && !e.metaKey && (inOverlay(e) || t === document.body || t === document.documentElement)) e.stopImmediatePropagation();
   }
 
   // ---------- Submit: make sure every edit is in Label Studio first ----------

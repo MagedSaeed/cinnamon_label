@@ -42,6 +42,7 @@
         "src/shared/util.js",
         "src/shared/mp4.js",
         "src/shared/segments.js",
+        "src/shared/config.js",
         "src/content/core.js",
         "src/content/cache.js",
         "src/content/downloader.js",
@@ -50,6 +51,7 @@
         "src/content/timeline.js",
         "src/content/segstore.js",
         "src/content/backup.js",
+        "src/content/form.js",
         "src/content/panel.js",
         "src/content/overlay.js",
         "src/content/main.js"

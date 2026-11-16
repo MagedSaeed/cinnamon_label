@@ -155,7 +155,7 @@
       return this.preview || (this.store ? this.store.segments : []);
     }
     get editable() {
-      return !!(this.store && this.store.supported && !this.store.readOnly);
+      return !!(this.store && this.store.supported && !this.store.readOnly && !this.segmentsDisabled);
     }
     _localX(e) {
       return e.clientX - this.dt.getBoundingClientRect().left;

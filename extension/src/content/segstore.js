@@ -40,6 +40,7 @@
       this.segments = st.segments || [];
       this.labelsName = st.labelsName;
       this.textFields = st.textFields || [];
+      this.taskFields = st.taskFields || {};
       this.objectName = st.objectName;
       if (this.selected && !this.segments.some((g) => g.id === this.selected)) this.selected = null;
     }
@@ -118,13 +119,19 @@
       return res.created;
     }
 
-    // Per-segment answer. Texts are written after a short pause in typing (or on flush).
+    // An answer: per segment (id = segment id) or for the whole task (id = null).
+    // Texts are written after a short pause in typing (or on flush).
     setField(id, name, value, { text = false } = {}) {
       if (this.readOnly) return;
-      const g = this.segments.find((x) => x.id === id);
-      if (g) g.fields = { ...g.fields, [name]: text ? (value ? [value] : undefined) : value };
+      const local = text ? (value ? [value] : undefined) : value;
+      if (id == null) this.taskFields = { ...this.taskFields, [name]: local };
+      else {
+        const g = this.segments.find((x) => x.id === id);
+        if (g) g.fields = { ...g.fields, [name]: local };
+      }
       if (!text) {
-        this._write(() => CL.page("setField", { id, name, value }));
+        this._write(() => (id == null ? CL.page("setTaskField", { name, value }) : CL.page("setField", { id, name, value })));
+        this._emit();
         return;
       }
       const k = `${id}|${name}`;
@@ -142,11 +149,11 @@
       clearTimeout(t.timer);
       this._textTimers.delete(k);
       return this._write(
-        () => CL.page("setField", { id: t.id, name: t.name, value: t.value }),
+        () => (t.id == null ? CL.page("setTaskField", { name: t.name, value: t.value }) : CL.page("setField", { id: t.id, name: t.name, value: t.value })),
         (r) => {
-          const g = r.state.segments.find((x) => x.id === t.id);
-          const got = g && g.fields[t.name] ? [].concat(g.fields[t.name]).join("") : "";
-          return got === (t.value || "") ? null : "The transcript was not saved into Label Studio.";
+          const fields = t.id == null ? r.state.taskFields : (r.state.segments.find((x) => x.id === t.id) || {}).fields;
+          const got = fields && fields[t.name] ? [].concat(fields[t.name]).join("") : "";
+          return got === (t.value || "") ? null : "The text was not saved into Label Studio.";
         }
       );
     }
