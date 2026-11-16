@@ -17,6 +17,10 @@
 .cl-dl svg{width:13px; height:13px; display:block}
 .cl-dl[data-s="saved"]{color:#2f7d4f}
 .cl-dl[data-s="downloading"]{color:#8a4b2a; font-variant-numeric:tabular-nums}
+.cl-dl .ring circle{transition:stroke-dashoffset .4s}
+.cl-dl .stop{display:none}
+.cl-dl[data-s="downloading"]:hover .ring{display:none}
+.cl-dl[data-s="downloading"]:hover .stop{display:block}
 .cl-dl[data-s="open"]{cursor:default}
 .cl-dl[data-s="open"]:hover{background:none}
 `;
@@ -33,6 +37,13 @@
       CL.warn("Task list buttons:", e);
     }
   };
+  // Downloading: a ring that fills with the progress (and, on hover, a stop square).
+  const ring = (frac) => {
+    const c = 2 * Math.PI * 6;
+    const off = frac == null ? c * 0.75 : c * (1 - Math.max(0, Math.min(1, frac)));
+    return `<svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 8 8)"/></svg>`;
+  };
+  const STOP = '<svg class="stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></svg>';
   const apiBase = () => location.pathname.split("/projects/")[0];
   let savedTasks = new Set(); // task ids with a saved video (from the saved-videos index)
   let timer = 0;
@@ -44,7 +55,7 @@
     savedTasks = new Set(Object.values(o.clCacheIndex || {}).map((e) => e && e.taskId).filter((x) => x != null).map(Number));
   }
   const onStorage = (changes, area) => {
-    if (area === "local" && changes.clCacheIndex) loadSaved().then(paint).catch(CL.warn);
+    if (area === "local" && changes.clCacheIndex) loadSaved().then(() => paint()).catch(CL.warn);
   };
 
   async function videoUrl(taskId) {
@@ -59,26 +70,21 @@
     return url;
   }
 
-  // The ID cell of each row: the column headed "ID", else the first cell that is just a number.
+  // Each row of the list, with its task id (tagged by the page bridge from Label Studio's own data).
+  // The button goes in the ID column when it is shown, else in the cell after the checkbox.
   function rows() {
     const heads = [...document.querySelectorAll(".lsf-table-head .lsf-table__cell")];
     const col = heads.findIndex((c) => c.textContent.trim() === "ID");
     const out = [];
     for (const row of document.querySelectorAll(".lsf-table-row")) {
+      const id = Number(row.dataset.clTask);
+      if (!id) continue;
       const cells = [...row.children];
-      let cell = col >= 0 ? cells[col] : null;
-      if (!cell || !/^\d+$/.test(idText(cell))) cell = cells.find((c) => /^\d+$/.test(idText(c)));
-      if (cell) out.push({ cell, id: Number(idText(cell)) });
+      const cell = (col >= 0 && cells[col]) || cells.find((c) => !c.classList.contains("lsf-select-row")) || null;
+      if (cell) out.push({ cell, id });
     }
     return out;
   }
-  const idText = (cell) => {
-    // The cell's own text, without our button.
-    let t = "";
-    for (const n of cell.querySelectorAll("*:not(.cl-dl):not(.cl-dl *)")) if (!n.children.length) t += n.textContent;
-    if (!cell.children.length) t = cell.textContent;
-    return t.replace(/\D*$/, "").trim();
-  };
 
   function state(id) {
     const open = CL.openDownload && CL.openDownload();
@@ -88,7 +94,8 @@
     return { s: savedTasks.has(id) ? "saved" : "get" };
   }
 
-  function paint() {
+  async function paint() {
+    await CL.page("tagRows").catch(() => 0);
     for (const { cell, id } of rows()) {
       let b = cell.querySelector(".cl-dl");
       if (!b) {
@@ -118,12 +125,10 @@
       } else if (s === "saved") {
         b.innerHTML = ICON.saved;
         b.title = "Video saved in this browser. Click to download it again.";
-      } else if (s === "open") {
-        b.textContent = pct;
-        b.title = "Downloading for the open task";
       } else {
-        b.textContent = pct;
-        b.title = "Downloading in the background. Click to stop.";
+        const frac = p && p.total ? p.loaded / p.total : null;
+        b.innerHTML = ring(frac) + (s === "downloading" ? STOP : "") + `<span>${pct}</span>`;
+        b.title = s === "open" ? "Downloading for the open task" : "Downloading in the background. Click to stop.";
       }
       b.setAttribute("aria-label", b.title);
     }
@@ -136,7 +141,7 @@
     const url = await videoUrl(id);
     const settings = await CL.settings();
     CL.prefetch.manual(id, url, settings);
-    paint();
+    paint().catch(() => {});
   }
 
   CL.taskList = {
@@ -147,7 +152,7 @@
       document.head.append(styleEl);
       chrome.storage.onChanged.addListener(onStorage);
       loadSaved().catch(CL.warn);
-      timer = setInterval(safe(paint), 700); // Label Studio re-renders its rows freely
+      timer = setInterval(() => paint().catch((e) => CL.warn("Task list buttons:", e)), 700); // Label Studio re-renders its rows freely
     },
     stop() {
       clearInterval(timer);

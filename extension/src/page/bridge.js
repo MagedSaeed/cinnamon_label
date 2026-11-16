@@ -32,6 +32,25 @@
       return false;
     }
   };
+  // The task id of each row in Label Studio's task list, copied onto the row as data-cl-task (the
+  // list doesn't always show an ID column). Read from React's props; read-only.
+  function tagRows() {
+    let n = 0;
+    for (const row of document.querySelectorAll(".lsf-table-row")) {
+      const fk = Object.keys(row).find((k) => k.startsWith("__reactFiber"));
+      let f = fk ? row[fk] : null;
+      for (let i = 0; f && i < 6; i++, f = f.return) {
+        const id = f.memoizedProps && f.memoizedProps.data && f.memoizedProps.data.id;
+        if (typeof id === "number") {
+          if (row.dataset.clTask !== String(id)) row.dataset.clTask = String(id);
+          n++;
+          break;
+        }
+      }
+    }
+    return n;
+  }
+
   const isWaveformRequest = (url) => /[?&]lsref=1(&|$)/.test(url) && /\/data\/local-files\//.test(url);
 
   const XO = XMLHttpRequest.prototype.open;
@@ -400,6 +419,8 @@
       switch (m.op) {
         case "state":
           return reply(m.id, true, state());
+        case "tagRows":
+          return reply(m.id, true, tagRows());
         case "segments":
           return reply(m.id, true, readSegments());
         case "applyPlan":
