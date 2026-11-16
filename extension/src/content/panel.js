@@ -76,6 +76,17 @@
 /* Skipped: full strength (still clickable), marked by faint diagonal stripes and a dashed skip tag. */
 .card.skipped{background:linear-gradient(to bottom, #fff 62%, rgba(255,255,255,0) 92%), repeating-linear-gradient(135deg, #fff 0 9px, #f6f7f9 9px 18px)}
 .card.skipped .ch .sub .tag[data-k="skip"]{border-style:dashed; background:#fff}
+.ch .sub .tag[data-d]{font-weight:600}
+.ch .sub .tag[data-d="0"]{--dc:#0f6b5c; --db:#e2f3ef; --dl:#a9d8cc}
+.ch .sub .tag[data-d="1"]{--dc:#2f6b22; --db:#e8f4e3; --dl:#b5d9a8}
+.ch .sub .tag[data-d="2"]{--dc:#5a3fa0; --db:#eee9fa; --dl:#cbbdef}
+.ch .sub .tag[data-d="3"]{--dc:#6b6216; --db:#f3f1dc; --dl:#d9d29a}
+.ch .sub .tag[data-d="4"]{--dc:#1f5f73; --db:#e2f1f6; --dl:#a8d2df}
+.ch .sub .tag[data-d="5"]{--dc:#6e2f6e; --db:#f4e7f4; --dl:#dbb6db}
+.ch .sub .tag[data-d="6"]{--dc:#3f4d63; --db:#e9edf3; --dl:#bcc6d6}
+.ch .sub .tag[data-d="7"]{--dc:#7a4a3a; --db:#f5ebe6; --dl:#dfc1b5}
+.ch .sub .tag[data-d]{color:var(--dc); background:var(--db); border-color:var(--dl)}
+.ch .sub .tag[data-d][data-alt]{background:#fff; font-weight:500}
 .ch .sub .tag[data-k="m"]{background:#e7f0fb; border-color:#b9d3f1; color:#1f4f8a; font-weight:600}
 .ch .sub .tag[data-k="f"]{background:#fbe9f1; border-color:#f0bfd4; color:#8a2554; font-weight:600}
 .ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; /* the whole transcript, for reviewing */
@@ -646,6 +657,18 @@
     const values = (g) => ({ ...((store && store.taskFields) || {}), ...((g && g.fields) || {}) });
     const segmentsHidden = () => !!(form && store && !CFG.isVisible({ when: form.segmentLabelsWhen }, store.taskFields || {}));
     const missingFor = (g) => (form ? CFG.missing(form.segment, values(g)) : []);
+    // The dialects named in this project's form, in order (main question first, then alternatives).
+    let dialectList = null;
+    let dialectFor = null;
+    const dialectOrder = () => {
+      if (dialectFor !== form) {
+        dialectFor = form;
+        dialectList = [];
+        for (const it of (form && form.segment) || [])
+          if (it.kind === "choices" && /dialect/i.test(it.name || "")) for (const o of it.options) if (!dialectList.includes(String(o.value))) dialectList.push(String(o.value));
+      }
+      return dialectList;
+    };
     // Collapsed-card summary: the visible choice answers (one tag each, the question as tooltip),
     // and the transcript's first line.
     function summary(g) {
@@ -657,8 +680,8 @@
         if (!CFG.isVisible(it, v)) continue;
         const ans = [].concat(v[it.name] || []).filter(Boolean);
         const q = CFG.labelFor(form.segment, it) || it.name;
-        if (it.kind === "choices" && ans.length && !(it.multiple && it.options.length === 1)) for (const a of ans) parts.push({ text: a, q });
-        if (it.kind === "choices" && it.multiple && it.options.length === 1 && ans.length) parts.unshift({ text: it.options[0].label, q });
+        if (it.kind === "choices" && ans.length && !(it.multiple && it.options.length === 1)) for (const a of ans) parts.push({ text: a, q, name: it.name });
+        if (it.kind === "choices" && it.multiple && it.options.length === 1 && ans.length) parts.unshift({ text: it.options[0].label, q, name: it.name });
         if (it.kind === "textarea" && !pv && (it.rows >= 3 || it.dir === "rtl") && ans.length) pv = ans.join("\n");
       }
       return { tags: parts, pv };
@@ -839,6 +862,12 @@
                 if (/^(male|man|ذكر)$/.test(k)) tag.dataset.k = "m";
                 else if (/^(female|woman|أنثى|انثى)$/.test(k)) tag.dataset.k = "f";
                 else if (/^skip\b/.test(k)) tag.dataset.k = "skip";
+                else if (/dialect/i.test(x.name || "")) {
+                  // Each dialect keeps one colour (its place in the project's list); alternatives are outlined.
+                  const i = dialectOrder().indexOf(String(x.text));
+                  tag.dataset.d = String((i < 0 ? 0 : i) % 8);
+                  if (/_alt/i.test(x.name)) tag.dataset.alt = "1";
+                }
                 tag.textContent = x.text;
                 tag.title = x.q;
                 return tag;
