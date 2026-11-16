@@ -23,7 +23,7 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
 - **Video:** the video streams while it downloads and is saved in the browser, so it opens instantly next time. The bar along the waveform shows what has downloaded; playing beyond it may pause briefly.
 - **Segments:**
   - Drag on an empty part of the waveform to create a segment, or use **Add segment**, then **Mark end** while playing.
-  - Drag a segment's edge to move it. Shift turns snapping off; Alt moves an edge without dragging a touching neighbour along.
+  - Drag a segment's edge to move it. Segments are always separate: only that segment changes, and an edge stops at its neighbour's edge instead of pushing it. Shift turns snapping off.
   - Fine-tune start and end with the − / + buttons or by typing a time.
   - **Split at playhead**, **Merge with next**, **Delete**, **Undo** and **Redo** are in the toolbar.
   - Segments never overlap. A split segment starts with empty answers; merging keeps the first segment's answers and joins the transcripts.

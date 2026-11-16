@@ -12,7 +12,6 @@
   const S = {};
   const MIN_DUR = 0.1; // seconds
   const EPS = 1e-6;
-  const TOUCH = 0.02; // edges closer than this are treated as one shared boundary
   S.MIN_DUR = MIN_DUR;
 
   const round = (t) => Math.round(t * 1000) / 1000; // millisecond precision, like Label Studio's UI
@@ -105,9 +104,10 @@
     return { plan, added, skipped };
   };
 
-  // Move one edge of segment `id` to time t. A neighbour that touches this edge moves with it
-  // (shared boundary), unless `detach` is true. Clamped so nothing overlaps or gets too short.
-  S.moveEdge = function moveEdge(segs, id, edge, t, duration, { detach = false } = {}) {
+  // Move one edge of segment `id` to time t. Segments are always separate: only this segment
+  // changes, and the edge stops at a neighbour's edge instead of pushing it. Clamped so nothing
+  // overlaps or gets too short.
+  S.moveEdge = function moveEdge(segs, id, edge, t, duration) {
     const s = sorted(segs);
     const i = s.findIndex((g) => g.id === id);
     if (i < 0) return null;
@@ -115,20 +115,16 @@
     const plan = emptyPlan();
     if (edge === "start") {
       const prev = s[i - 1];
-      const shared = !detach && prev && Math.abs(prev.end - g.start) <= TOUCH;
-      const lo = shared ? prev.start + MIN_DUR : prev ? prev.end : 0;
+      const lo = prev ? prev.end : 0;
       const nt = round(Math.max(lo, Math.min(g.end - MIN_DUR, t)));
       if (Math.abs(nt - g.start) < EPS) return plan;
       plan.update.push({ id: g.id, start: nt, end: g.end });
-      if (shared) plan.update.push({ id: prev.id, start: prev.start, end: nt });
     } else if (edge === "end") {
       const next = s[i + 1];
-      const shared = !detach && next && Math.abs(next.start - g.end) <= TOUCH;
-      const hi = shared ? next.end - MIN_DUR : next ? next.start : duration;
+      const hi = next ? next.start : duration;
       const nt = round(Math.min(hi, Math.max(g.start + MIN_DUR, t)));
       if (Math.abs(nt - g.end) < EPS) return plan;
       plan.update.push({ id: g.id, start: g.start, end: nt });
-      if (shared) plan.update.push({ id: next.id, start: nt, end: next.end });
     } else return null;
     return plan;
   };

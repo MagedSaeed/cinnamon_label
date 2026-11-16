@@ -21,18 +21,14 @@ test("create clips to the gap where the drag started, in either direction", () =
   ok(S.apply(segs(), r.plan));
 });
 
-test("moveEdge moves a shared boundary with the neighbour, clamped", () => {
-  const p = S.moveEdge(segs(), "a", "end", 25, D);
-  const out = S.apply(segs(), p);
-  assert.deepEqual(out.map((g) => [g.id, g.start, g.end]), [["a", 10, 25], ["b", 25, 30], ["c", 40, 50]]);
-  ok(out);
-  // Can't squeeze b below the minimum.
-  const p2 = S.moveEdge(segs(), "a", "end", 35, D);
-  assert.equal(S.apply(segs(), p2).find((g) => g.id === "b").start, 30 - S.MIN_DUR);
-  ok(S.apply(segs(), p2));
-  // Detached: stops at the neighbour instead of pushing it.
-  const p3 = S.moveEdge(segs(), "a", "end", 25, D, { detach: true });
-  assert.deepEqual(p3.update, []);
+test("moveEdge moves only its own segment, never a touching neighbour", () => {
+  // Stops at the touching neighbour instead of pushing it.
+  assert.deepEqual(S.moveEdge(segs(), "a", "end", 25, D).update, []);
+  const shrink = S.apply(segs(), S.moveEdge(segs(), "b", "start", 23, D));
+  assert.deepEqual(shrink.map((g) => [g.id, g.start, g.end]), [["a", 10, 20], ["b", 23, 30], ["c", 40, 50]]);
+  const grow = S.apply(segs(), S.moveEdge(segs(), "b", "end", 38, D));
+  assert.deepEqual(grow.map((g) => [g.id, g.start, g.end]), [["a", 10, 20], ["b", 20, 38], ["c", 40, 50]]);
+  ok(grow);
 });
 
 test("moveEdge never crosses a non-touching neighbour or the video bounds", () => {
@@ -89,7 +85,7 @@ test("thousands of random edits keep segments valid", () => {
     const op = Math.floor(rnd() * 6);
     let plan = null;
     if (op === 0) plan = S.create(list, t, t + (rnd() - 0.3) * 20, D)?.plan;
-    else if (pick && op === 1) plan = S.moveEdge(list, pick.id, rnd() < 0.5 ? "start" : "end", t, D, { detach: rnd() < 0.3 });
+    else if (pick && op === 1) plan = S.moveEdge(list, pick.id, rnd() < 0.5 ? "start" : "end", t, D);
     else if (pick && op === 2) plan = S.split(list, pick.id, pick.start + rnd() * (pick.end - pick.start));
     else if (pick && op === 3) plan = S.mergeNext(list, pick.id)?.plan;
     else if (pick && op === 4) plan = S.remove(list, pick.id);

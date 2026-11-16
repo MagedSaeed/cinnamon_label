@@ -303,7 +303,7 @@
       }
     });
 
-    // ---- nudge an edge by 0.05 s (Shift: 0.25 s); a touching neighbour moves with it ----
+    // ---- nudge an edge by the nudge step (Shift: the larger step); only this segment changes ----
     CL.on(bar, "click", async (e) => {
       const b = e.target.closest(".nudge");
       if (!b || !editable()) return;

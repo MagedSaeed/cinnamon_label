@@ -107,7 +107,7 @@
       //  drag on empty waveform -> new segment; drag an edge -> resize; drag a segment's middle -> move it;
       //  click a segment -> select + seek;
       //  click empty -> seek. Edges snap to the playhead and other edges (Shift: no snapping);
-      //  Alt while resizing leaves a touching neighbour where it is.
+      //  An edge moves only its own segment (it stops at a neighbour's edge, never pushes it).
       CL.on(this.dt, "pointerdown", (e) => this._down(e));
       CL.on(this.dt, "pointermove", (e) => this._move(e));
       CL.on(this.dt, "pointerup", (e) => this._up(e));
@@ -253,7 +253,7 @@
       this.follow = false; // dragging: keep the view still
       if (d.kind === "edge") {
         const t = this._snap(this._xToTime(e), e, d.id);
-        d.plan = S.moveEdge(d.base, d.id, d.edge, t, this.duration, { detach: e.altKey });
+        d.plan = S.moveEdge(d.base, d.id, d.edge, t, this.duration);
         this.preview = d.plan ? S.apply(d.base, d.plan) : null;
       } else if (d.kind === "select" && this.editable && CL.allowMove) {
         // Drag the middle of a segment: slide the whole segment, keeping its length. Either edge
