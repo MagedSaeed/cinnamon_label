@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Cinnamon Label</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="hero">
+    <!-- A waveform with three segments and the playhead: what the extension edits. -->
+    <svg class="wave" viewBox="0 0 340 56" preserveAspectRatio="none" aria-hidden="true">
+      <g fill="#fff" opacity=".22">
+        <rect x="18" y="10" width="92" height="44" rx="4"/><rect x="128" y="10" width="70" height="44" rx="4"/><rect x="232" y="10" width="96" height="44" rx="4"/>
+      </g>
+      <g fill="#E9B48F" opacity=".7">
+        <rect x="8" y="30" width="4" height="14" rx="2"/><rect x="16" y="22" width="4" height="30" rx="2"/><rect x="24" y="16" width="4" height="40" rx="2"/>
+        <rect x="32" y="24" width="4" height="26" rx="2"/><rect x="40" y="12" width="4" height="44" rx="2"/><rect x="48" y="26" width="4" height="22" rx="2"/>
+        <rect x="56" y="18" width="4" height="36" rx="2"/><rect x="64" y="28" width="4" height="18" rx="2"/><rect x="72" y="14" width="4" height="42" rx="2"/>
+        <rect x="80" y="22" width="4" height="30" rx="2"/><rect x="88" y="30" width="4" height="14" rx="2"/><rect x="96" y="20" width="4" height="34" rx="2"/>
+        <rect x="104" y="26" width="4" height="22" rx="2"/><rect x="112" y="32" width="4" height="10" rx="2"/><rect x="120" y="34" width="4" height="6" rx="2"/>
+        <rect x="128" y="18" width="4" height="36" rx="2"/><rect x="136" y="24" width="4" height="26" rx="2"/><rect x="144" y="14" width="4" height="42" rx="2"/>
+        <rect x="152" y="26" width="4" height="22" rx="2"/><rect x="160" y="20" width="4" height="34" rx="2"/><rect x="168" y="28" width="4" height="18" rx="2"/>
+        <rect x="176" y="16" width="4" height="40" rx="2"/><rect x="184" y="24" width="4" height="26" rx="2"/><rect x="192" y="30" width="4" height="14" rx="2"/>
+        <rect x="200" y="33" width="4" height="8" rx="2"/><rect x="208" y="34" width="4" height="6" rx="2"/><rect x="216" y="32" width="4" height="10" rx="2"/>
+        <rect x="224" y="30" width="4" height="14" rx="2"/><rect x="232" y="20" width="4" height="34" rx="2"/><rect x="240" y="12" width="4" height="44" rx="2"/>
+        <rect x="248" y="24" width="4" height="26" rx="2"/><rect x="256" y="16" width="4" height="40" rx="2"/><rect x="264" y="28" width="4" height="18" rx="2"/>
+        <rect x="272" y="20" width="4" height="34" rx="2"/><rect x="280" y="14" width="4" height="42" rx="2"/><rect x="288" y="26" width="4" height="22" rx="2"/>
+        <rect x="296" y="18" width="4" height="36" rx="2"/><rect x="304" y="28" width="4" height="18" rx="2"/><rect x="312" y="22" width="4" height="30" rx="2"/>
+        <rect x="320" y="30" width="4" height="14" rx="2"/>
+      </g>
+      <rect x="150" y="2" width="2" height="54" rx="1" fill="#fff" opacity=".9"/>
+    </svg>
+    <div class="brand">
+      <img class="logo" src="../icons/icon48.png" width="30" height="30" alt="">
+      <h1>Cinnamon Label</h1>
+      <span id="status" class="status" data-state="ok"><span class="dot"></span><span id="statusText">Active</span></span>
+    </div>
+    <p class="tagline">Steadier playback and easier segment editing for Label Studio. Never submits.</p>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-general" aria-controls="p-general" aria-selected="true">General</button>
+      <button role="tab" id="tab-saved" aria-controls="p-saved" aria-selected="false">Saved videos</button>
+      <button role="tab" id="tab-preseg" aria-controls="p-preseg" aria-selected="false">Presegmentation</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- General -->
+    <div role="tabpanel" id="p-general" aria-labelledby="tab-general" class="panel cols">
+      <div class="col">
+        <section>
+          <label class="switch" for="enabled">
+            <span><b>Use Cinnamon Label<button type="button" class="tip" aria-label="About Use Cinnamon Label" data-tip="Shows the Cinnamon Label editor on Label Studio task pages. Turn it off to get Label Studio exactly as it was; reload the task page afterwards. You can also switch per task with the “Switch to native UI” button.">i</button></b><small>On Label Studio task pages</small></span>
+            <input type="checkbox" id="enabled"><i></i>
+          </label>
+        </section>
+        <section>
+          <h2>Downloads</h2>
+          <div class="field">
+            <span class="name" id="connLabel">Parallel connections<button type="button" class="tip" aria-label="About Parallel connections" data-tip="The video server limits each connection to about 0.4 MB/s, so a video is fetched in several pieces at once. 3 is about 3× faster than 1. The browser opens at most 6 connections to the site, so at most 4 are used, keeping room for the video player and Label Studio itself (saving, Submit).">i</button></span>
+            <div class="segmented four" role="radiogroup" aria-labelledby="connLabel">
+              <label><input type="radio" name="connections" value="1"><span>1</span></label>
+              <label><input type="radio" name="connections" value="2"><span>2</span></label>
+              <label><input type="radio" name="connections" value="3"><span>3<small>Default</small></span></label>
+              <label><input type="radio" name="connections" value="4"><span>4</span></label>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="col">
+        <section>
+          <h2>Development</h2>
+          <label class="switch" for="devReload">
+            <span><b>Reload on code changes<button type="button" class="tip" aria-label="About Reload on code changes" data-tip="While the extension is being built: when its files change, it reloads itself and refreshes open Label Studio tabs (never while edits are still being written). Leave it off for normal annotation.">i</button></b><small>For development only</small></span>
+            <input type="checkbox" id="devReload"><i></i>
+          </label>
+        </section>
+      </div>
+    </div>
+
+    <!-- Saved videos -->
+    <div role="tabpanel" id="p-saved" aria-labelledby="tab-saved" class="panel" hidden>
+      <section class="usage">
+        <div class="usage-row">
+          <div class="usage-txt"><b id="used">0 MB</b> of <span id="limitTxt">2 GB</span> used<span id="countTxt"></span></div>
+          <label class="limit" for="cacheLimitGB">Space for saved videos<button type="button" class="tip" aria-label="About Space for saved videos" data-tip="Saved videos open instantly, without downloading again. When this space is full, the videos you haven't opened for the longest time are removed first.">i</button>
+            <select id="cacheLimitGB">
+              <option value="1">1 GB</option><option value="2">2 GB</option><option value="5">5 GB</option>
+              <option value="10">10 GB</option><option value="20">20 GB</option>
+            </select>
+          </label>
+        </div>
+        <div class="meter"><b id="usedBar"></b></div>
+      </section>
+      <ul id="list" class="list"></ul>
+      <p id="empty" class="empty">No saved videos yet. Opening a task saves its video here.</p>
+      <p id="queued" class="info" hidden>Deletions are applied by the Label Studio tab: now if one is open, otherwise the next time you open one.</p>
+    </div>
+
+    <!-- Presegmentation -->
+    <div role="tabpanel" id="p-preseg" aria-labelledby="tab-preseg" class="panel" hidden>
+      <p class="empty">Presegmentation settings will be here: server address, provider and segment rules. Suggested segments are only added to the annotation when you accept them.</p>
+    </div>
+  </main>
+
+  <div id="tooltip" role="tooltip" hidden></div>
+
+  <footer>
+    <span id="saved" class="saved" aria-live="polite">Changes save automatically</span>
+    <button id="deleteAll" class="link danger" type="button" hidden>Delete all saved videos</button>
+    <button id="reset" class="link" type="button">Reset to defaults</button>
+  </footer>
+
+  <script src="../src/shared/util.js"></script>
+  <script src="popup.js"></script>
+</body></html>
