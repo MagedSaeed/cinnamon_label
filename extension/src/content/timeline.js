@@ -14,6 +14,7 @@
     center: "#d9dde3",
     accent: "#8a4b2a",
     buffered: "#c3c8d0",
+    bufferedDt: "#5d6573",
     ruler: "#8c93a0",
     rulerBg: "#f3f4f6",
     tick: "#d9dde3",
@@ -573,6 +574,16 @@
           // waveform
           const playX = toX(t);
           this._wave(ctx, 0, w, rulerH + 6 * dpr, h - rulerH - 12 * dpr, t0, span, playX, gain, this._selRange(t0, span, w));
+          // While streaming: what the player itself has buffered (it plays without stopping there).
+          if (this.showBuffered) {
+            const b = this.v.buffered;
+            ctx.fillStyle = C.bufferedDt;
+            for (let i = 0; i < b.length; i++) {
+              const bx0 = Math.max(0, toX(b.start(i)));
+              const bx1 = Math.min(w, toX(b.end(i)));
+              if (bx1 > bx0) ctx.fillRect(bx0, h - 4 * dpr, bx1 - bx0, 4 * dpr);
+            }
+          }
           // segment edges and numbers (on top)
           ctx.font = `600 ${10.5 * dpr}px system-ui, sans-serif`;
           ctx.textBaseline = "middle";

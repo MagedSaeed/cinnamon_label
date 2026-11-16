@@ -137,6 +137,7 @@
       if (cached) {
         this.blob = cached;
         await player.setBlob(cached);
+        ui.setStreaming(false);
         ui.setNet({ kind: "cached", total: cached.size });
         serveWaveform(this.key, cached);
         const read = CL.blobReader(cached);
@@ -146,6 +147,7 @@
       }
 
       player.setNetwork(this.url);
+      ui.setStreaming(true);
       ui.timeline.setMessage("The waveform fills in as the video downloads.");
       this.dl = new CL.Downloader(this.url, {
         connections: settings.connections,
@@ -173,6 +175,7 @@
       this.pumpAudio();
       if (this.audioNeedsWholeFile) this.decodeWholeFile();
       await player.setBlob(blob);
+      ui.setStreaming(false);
       serveWaveform(this.key, blob);
       ui.setNet({ kind: "saving", total: blob.size });
       const r = await CL.cache
@@ -253,6 +256,7 @@
 
     destroy() {
       this.dead = true;
+      ui.setStreaming(false);
       if (this.backup) {
         this.backup.destroy();
         panel.setBackup(null);

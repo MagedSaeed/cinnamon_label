@@ -49,6 +49,10 @@ button{font:inherit; color:inherit; cursor:pointer}
 video{display:block; width:auto; height:auto; max-width:100%; max-height:100%; background:#000; box-shadow:0 0 0 1px var(--line)}
 video:not([data-ready]){visibility:hidden}
 .stage .msg{position:absolute; inset:auto 0 16px; text-align:center; color:var(--muted); font-size:13px; pointer-events:none}
+.streamnote{position:absolute; left:12px; right:12px; top:12px; z-index:1; display:flex; align-items:center; justify-content:center; gap:8px; margin:0;
+  padding:8px 14px; border-radius:8px; background:#fff4d6; border:1px solid #f0d48a; color:#6b4e00; font-size:13px; font-weight:500;
+  box-shadow:0 1px 3px rgba(107,78,0,.12); pointer-events:none}
+.streamnote svg{width:16px; height:16px; flex:none; fill:none; stroke:#b7791f; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
 .side{border-left:1px solid var(--line); background:var(--surface); padding:18px; overflow:auto}
 .side{display:flex; flex-direction:column; min-height:0; min-width:0}
 .stage{min-height:0}
@@ -127,7 +131,8 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
           <button class="ghost" id="native" title="Show Label Studio's own editor. Your work is kept.">Switch to native UI</button>
         </header>
         <div class="body">
-          <section class="stage"><video id="video" playsinline></video><div class="msg" id="stageMsg"></div></section>
+          <section class="stage"><video id="video" playsinline></video><div class="msg" id="stageMsg"></div>
+            <p class="streamnote" id="streamNote" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>The video is still downloading, so it may pause to buffer. It plays smoothly once the download finishes.</p></section>
           <aside class="side" id="side"></aside>
         </div>
         <footer class="transport">
@@ -241,6 +246,11 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         t.classList.add("show");
         clearTimeout(api._toastTimer);
         api._toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
+      },
+      // While the player streams from the server (before the download completes).
+      setStreaming(on) {
+        $("streamNote").hidden = !on;
+        if (api.timeline) api.timeline.showBuffered = !!on;
       },
       setStageMessage(t) {
         $("stageMsg").textContent = t || "";
