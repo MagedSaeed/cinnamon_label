@@ -325,14 +325,10 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         api._toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
       },
       // Background / look-ahead downloads: { taskId, loaded, total, current } or null.
-      setAhead(list) {
-        const elx = $("ahead");
-        elx.hidden = !list || !list.length;
-        if (elx.hidden) return;
-        const one = (s) => `task ${s.taskId} ${s.total ? Math.floor((100 * s.loaded) / s.total) + "%" : "…"}`;
-        const paused = !!(CL.openDownload && CL.openDownload());
-        elx.textContent = (paused ? "Background, after this one: " : "Background: ") + list.map(one).join(", ");
-        elx.title = "Videos of other tasks downloading in the background (left unfinished, or the next tasks in your list), so they open instantly. The open task always goes first.";
+      // Other tasks' background downloads are shown on their buttons in the task list, not here:
+      // the header is only about the open task.
+      setAhead() {
+        $("ahead").hidden = true;
       },
       // While the player streams from the server (before the download completes).
       setStreaming(on) {
