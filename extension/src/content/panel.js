@@ -825,6 +825,7 @@
           c.pill.textContent = miss[i].length ? `${miss[i].length} still needed` : "✓ Complete";
           c.pill.title = miss[i].length ? "Still needed: " + miss[i].join(", ") : "Every required answer is given.";
           const sm = summary(x);
+          const skipped = sm.tags.some((x) => /^skip\b/i.test(String(x.text).trim()));
           const sig = sm.tags.map((x) => x.q + "=" + x.text).join("|");
           if (c.sub.dataset.sig !== sig) {
             c.sub.dataset.sig = sig;
@@ -845,8 +846,8 @@
           }
           c.sub.hidden = !sm.tags.length;
           // Answered with a "Skip…" option: grayed a little, so the segments that count stand out.
-          c.root.classList.toggle("skipped", sm.tags.some((x) => /^skip\b/i.test(String(x.text).trim())));
-          c.pv.textContent = sm.pv || "No transcript yet";
+          c.root.classList.toggle("skipped", skipped);
+          c.pv.textContent = sm.pv || (skipped ? "No transcription" : "No transcription yet");
           c.pv.classList.toggle("none", !sm.pv);
           c.pv.hidden = !form;
           const open = !!g && g.id === x.id;
