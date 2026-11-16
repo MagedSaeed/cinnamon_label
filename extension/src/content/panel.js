@@ -81,6 +81,13 @@
 .segbar .sep{width:1px; height:22px; background:var(--line); margin:0 4px}
 .segbar .who{font-weight:650; color:var(--ink); white-space:nowrap}
 .segbar .hint{color:var(--muted); font-size:12.5px}
+.tgrp{display:inline-flex; align-items:center}
+.tgrp .tf{border-radius:0; border-left:0; border-right:0}
+.nudge{width:24px; height:28px; padding:0; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:15px; line-height:1}
+.nudge:first-child{border-radius:6px 0 0 6px}
+.nudge:last-child{border-radius:0 6px 6px 0}
+.nudge:hover:not(:disabled){background:var(--cinnamon-soft); color:var(--cinnamon)}
+.nudge:disabled{opacity:.4; cursor:default}
 .tf{width:96px; padding:4px 7px; font:inherit; font-size:13px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; font-variant-numeric:tabular-nums}
 .tf:focus{outline:none; border-color:var(--cinnamon); box-shadow:0 0 0 3px var(--cinnamon-soft)}
 .segbar .dash{color:var(--muted)}
@@ -157,9 +164,9 @@
       <span class="sep" aria-hidden="true"></span>
       <span class="hint" id="bHint">Select a segment to edit it.</span>
       <span class="who" id="bWho" hidden></span>
-      <input class="tf" id="dStart" spellcheck="false" autocomplete="off" aria-label="Segment start" title="Start (e.g. 12.5 or 0:12.500), Enter to apply" hidden>
+      <span class="tgrp" id="gStart" hidden><button class="nudge" data-edge="start" data-dir="-1" title="Start 0.05 s earlier (Shift: 0.25 s)" aria-label="Start earlier">−</button><input class="tf" id="dStart" spellcheck="false" autocomplete="off" aria-label="Segment start" title="Start (e.g. 12.5 or 0:12.500), Enter to apply"><button class="nudge" data-edge="start" data-dir="1" title="Start 0.05 s later (Shift: 0.25 s)" aria-label="Start later">+</button></span>
       <span class="dash" id="bDash" hidden>–</span>
-      <input class="tf" id="dEnd" spellcheck="false" autocomplete="off" aria-label="Segment end" title="End (e.g. 14 or 0:14.000), Enter to apply" hidden>
+      <span class="tgrp" id="gEnd" hidden><button class="nudge" data-edge="end" data-dir="-1" title="End 0.05 s earlier (Shift: 0.25 s)" aria-label="End earlier">−</button><input class="tf" id="dEnd" spellcheck="false" autocomplete="off" aria-label="Segment end" title="End (e.g. 14 or 0:14.000), Enter to apply"><button class="nudge" data-edge="end" data-dir="1" title="End 0.05 s later (Shift: 0.25 s)" aria-label="End later">+</button></span>
       <span class="dur" id="dDur" hidden></span>
       <button class="btn" id="aPlay" title="Play this segment" hidden>${I.play}Play</button>
       <button class="btn" id="aSplit" title="Split this segment at the playhead" hidden>${I.split}Split</button>
@@ -242,6 +249,18 @@
         player.seekTo(g.start);
         timeline.revealSegment(g);
       }
+    });
+
+    // ---- nudge an edge by 0.05 s (Shift: 0.25 s); a touching neighbour moves with it ----
+    CL.on(bar, "click", async (e) => {
+      const b = e.target.closest(".nudge");
+      if (!b || !editable()) return;
+      const g = sel();
+      if (!g) return;
+      const step = (e.shiftKey ? 0.25 : 0.05) * Number(b.dataset.dir);
+      const plan = S.moveEdge(base(), g.id, b.dataset.edge, g[b.dataset.edge] + step, D());
+      if (!plan || !plan.update.length) return flash("That edge can't move further that way.", true);
+      await store.apply(plan, { select: g.id });
     });
 
     // ---- start / end fields ----
@@ -599,7 +618,7 @@
         $("aAdd").querySelector("span").textContent = marking ? "Mark end" : "Add segment";
         $("aAdd").title = marking ? `Started at ${U.fmtClock(marking.start)}. Press where the speech ends.` : "Start a segment at the playhead; press again to end it";
         $("aCancel").hidden = !marking;
-        for (const id of ["bWho", "dStart", "bDash", "dEnd", "dDur", "aPlay", "aSplit", "aMerge", "aDel"]) $(id).hidden = !g || !!marking;
+        for (const id of ["bWho", "gStart", "bDash", "gEnd", "dDur", "aPlay", "aSplit", "aMerge", "aDel"]) $(id).hidden = !g || !!marking;
         $("bHint").hidden = !!g && !marking;
         $("bHint").textContent = marking ? "Let it play, then press Mark end where the speech stops." : canEdit ? "Select a segment to edit it." : "";
         if (g) {
@@ -608,6 +627,7 @@
           if (root.activeElement !== $("dEnd")) $("dEnd").value = fmtMs(g.end);
           $("dDur").textContent = fmtDur(g.end - g.start);
           for (const id of ["dStart", "dEnd"]) $(id).disabled = !canEdit;
+          bar.querySelectorAll(".nudge").forEach((n) => (n.disabled = !canEdit));
           for (const id of ["aSplit", "aDel"]) $(id).disabled = !canEdit;
           $("aMerge").disabled = !canEdit || i === segs.length - 1;
         }
