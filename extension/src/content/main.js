@@ -37,6 +37,12 @@
   CL.onPage((m) => {
     if (m.op === "annotationChanged") {
       if (task && task.store) task.store.refresh().catch(() => {});
+      if (task && task.backup) task.backup.changed();
+      return;
+    }
+    if (m.op === "annotationSaved") {
+      // The user's Submit/Update/Skip went through: the local copy is no longer needed.
+      if (m.taskId != null) CL.backup.remove(m.taskId);
       return;
     }
     if (m.op !== "waveformWanted") return;
@@ -91,6 +97,11 @@
       panel.setStore(this.store);
       ui.setSync(this.store);
       this.store.refresh().catch(CL.warn);
+      // Local backup of this annotation (the server refuses drafts).
+      if (this.backup) this.backup.destroy();
+      this.backup = new CL.TaskBackup(this.taskId, { onOffer: (b) => !this.dead && panel.showOffer(b) });
+      panel.setBackup(this.backup);
+      this.backup.changed();
     }
 
     async start() {
@@ -225,6 +236,10 @@
 
     destroy() {
       this.dead = true;
+      if (this.backup) {
+        this.backup.destroy();
+        panel.setBackup(null);
+      }
       if (this.store) {
         // Finish writing what was typed, if Label Studio still has this annotation; then drop it.
         const st = this.store;
@@ -438,10 +453,12 @@
   async function start() {
     settings = await CL.settings();
     CL.setActive(settings.enabled);
+    CL.setNoDrafts(settings.enabled && settings.noDrafts);
     if (!settings.enabled) {
       CL.setMode("native");
       return;
     }
+    CL.backup.prune();
     try {
       if (!localStorage.getItem("cinnamonLabel.mode")) CL.setMode("cinnamon");
     } catch (_) {}
@@ -485,6 +502,7 @@
         if (area === "sync") {
           settings = await CL.settings();
           CL.setActive(settings.enabled);
+          CL.setNoDrafts(settings.enabled && settings.noDrafts);
           if (!settings.enabled) {
             CL.setMode("native");
             shutdown();

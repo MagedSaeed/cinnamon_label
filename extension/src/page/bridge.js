@@ -273,10 +273,72 @@
     return true;
   }
 
+  // ---------- 4. drafts and submits ----------
+  // The server refuses Label Studio's draft auto-save (403, "Runtime error: Forbidden"). When the
+  // user's setting asks for it, auto-save is paused for each annotation; the content script keeps a
+  // local backup instead. (Label Studio's own pause; nothing is sent.)
+  const noDrafts = () => {
+    try {
+      return localStorage.getItem("cinnamonLabel.noDrafts") === "1";
+    } catch (_) {
+      return false;
+    }
+  };
+  const pausedAnns = new WeakSet();
+  function keepDraftsPaused() {
+    const a = ann();
+    if (!a || !noDrafts() || pausedAnns.has(a) || typeof a.pauseAutosave !== "function") return;
+    a.pauseAutosave();
+    pausedAnns.add(a);
+  }
+
+  // Watch (never change) Label Studio's own requests, to know when the user's Submit, Update or Skip
+  // succeeded: then the local backup of that task is no longer needed.
+  const F = window.fetch;
+  window.fetch = function (input, init) {
+    const p = F.apply(this, arguments);
+    try {
+      const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
+      const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      const created = /\/api\/tasks\/(\d+)\/annotations\/?(?:\?|$)/.exec(url);
+      const updated = /\/api\/annotations\/(\d+)\/?(?:\?|$)/.exec(url);
+      if ((created && method === "POST") || (updated && (method === "PATCH" || method === "PUT"))) {
+        const taskId = created ? Number(created[1]) : window.Htx && window.Htx.task ? window.Htx.task.id : null;
+        p.then((r) => r && r.ok && post({ op: "annotationSaved", taskId })).catch(() => {});
+      }
+    } catch (_) {}
+    return p;
+  };
+
+  // Results as Submit would send them (for the local backup).
+  function serialize() {
+    const a = ann();
+    const s = window.Htx;
+    if (!a || !s || !s.task) return null;
+    return { taskId: s.task.id, annotationPk: a.pk || null, results: a.serializeAnnotation() };
+  }
+
+  // Put backed-up results into an EMPTY annotation (the user clicked Restore). One undo step.
+  function restore({ taskId, results }) {
+    const a = ann();
+    guardWritable(a);
+    if (!window.Htx.task || window.Htx.task.id !== taskId) throw new Error("A different task is open now.");
+    if (a.serializeAnnotation().length) throw new Error("This annotation already has work in it; nothing was restored.");
+    const h = a.history;
+    if (h && h.freeze) h.freeze("cinnamon-label-restore");
+    try {
+      a.appendResults(results);
+    } finally {
+      if (h && h.unfreeze) h.unfreeze("cinnamon-label-restore");
+    }
+    return { state: readSegments(), count: a.serializeAnnotation().length };
+  }
+
   // Tell the content script when the annotation changes from elsewhere (undo, native UI, ...).
   let lastSig = "";
   setInterval(() => {
     try {
+      keepDraftsPaused();
       const a = ann();
       if (!a) return;
       const sig = a.id + "|" + JSON.stringify(a.serializeAnnotation());
@@ -313,6 +375,10 @@
           if (a && typeof a[m.op] === "function") a[m.op](); // Label Studio's own history
           return reply(m.id, true, { canUndo: !!(a && a.history && a.history.canUndo), canRedo: !!(a && a.history && a.history.canRedo) });
         }
+        case "serialize":
+          return reply(m.id, true, serialize());
+        case "restore":
+          return reply(m.id, true, restore(m.args));
         case "history": {
           const a = ann();
           return reply(m.id, true, { canUndo: !!(a && a.history && a.history.canUndo), canRedo: !!(a && a.history && a.history.canRedo) });

@@ -12,6 +12,7 @@
     enabled: true, // master switch (popup)
     connections: 3, // parallel range requests per download (HTTP/1.1: 6 per site; keep room for the player and Label Studio's API)
     cacheLimitGB: 2,
+    noDrafts: true, // pause Label Studio's draft auto-save (the server refuses it); we keep a local backup
     devReload: false,
   };
   CL.settings = () => new Promise((r) => chrome.storage.sync.get(CL.DEFAULTS, r));
@@ -35,6 +36,11 @@
   CL.setMode = (m) => {
     try {
       localStorage.setItem(MODE_KEY, m);
+    } catch (_) {}
+  };
+  CL.setNoDrafts = (on) => {
+    try {
+      localStorage.setItem("cinnamonLabel.noDrafts", on ? "1" : "0");
     } catch (_) {}
   };
   // Tells page.js whether to hold Label Studio's waveform request for us (see bridge.js).

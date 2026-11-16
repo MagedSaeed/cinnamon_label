@@ -42,6 +42,8 @@ li.sel .n{background:var(--cinnamon)}
 .btn.danger:hover:not(:disabled){border-color:#e8b4ae}
 .note{margin:0; font-size:12.5px; color:var(--muted)}
 .note.err{color:var(--err)}
+.restore{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border-radius:8px; background:var(--cinnamon-soft); border:1px solid #e6cfc2}
+.restore span{flex:1; min-width:200px}
 .ro{margin:0; padding:8px 10px; border-radius:6px; background:var(--surface); color:var(--muted); border:1px solid var(--line)}
 `;
 
@@ -76,6 +78,11 @@ li.sel .n{background:var(--cinnamon)}
             <button class="icon" id="undo" title="Undo (Label Studio's history)" aria-label="Undo">${I.undo}</button>
             <button class="icon" id="redo" title="Redo" aria-label="Redo">${I.redo}</button>
           </div>
+        </div>
+        <div class="restore" id="restore" role="region" aria-label="Backup" hidden>
+          <span id="rTxt"></span>
+          <button class="btn primary" id="rDo">Restore</button>
+          <button class="btn" id="rNo">Discard</button>
         </div>
         <ol class="list" id="segList" aria-label="Segments"></ol>
         <p class="empty" id="segEmpty">No segments yet. Drag across the waveform below to mark one.</p>
@@ -177,10 +184,10 @@ li.sel .n{background:var(--cinnamon)}
       if (t <= g.start || t >= g.end) return setNote("Move the playhead inside this segment first.", true);
       const plan = S.split(base(), g.id, t);
       if (!plan) return setNote("Too close to the segment's edge to split.", true);
-      plan.create[0].copyFrom = g.id; // same speaker: keep the choices on both halves
+      // A split usually means the speaker changed: the new segment starts with no answers.
       setNote("");
       await store.apply(plan, { select: g.id });
-      setNote("Split. The choices were copied to the new segment; its transcript is empty.");
+      setNote("Split. The new segment starts with no answers; this one keeps its answers and transcript.");
     });
     CL.on($("aMerge"), "click", async () => {
       const g = sel();
@@ -226,9 +233,46 @@ li.sel .n{background:var(--cinnamon)}
       setNote(t);
     };
 
+    // ---- backup offer ----
+    let backup = null;
+    const when = (ts) => new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    CL.on($("rDo"), "click", async () => {
+      if (!backup) return;
+      $("rDo").disabled = true;
+      const r = await backup.restore();
+      $("rDo").disabled = false;
+      if (store) await store.refresh();
+      flash(r.message);
+    });
+    let discardArmed = 0;
+    CL.on($("rNo"), "click", async () => {
+      if (!backup) return;
+      if (Date.now() - discardArmed > 4000) {
+        discardArmed = Date.now();
+        $("rNo").textContent = "Click again to delete the backup";
+        setTimeout(() => ($("rNo").textContent = "Discard"), 4000);
+        return;
+      }
+      discardArmed = 0;
+      $("rNo").textContent = "Discard";
+      await backup.discard();
+    });
+
     // ---- render ----
     let lastListSig = "";
     const api = {
+      setBackup(b) {
+        backup = b;
+        api.showOffer(b ? b.offer : null);
+      },
+      // b: a stored backup ({ segments, savedAt }) to offer, or null.
+      showOffer(b) {
+        $("restore").hidden = !b;
+        if (b) {
+          const n = b.segments;
+          $("rTxt").textContent = `This browser has unsubmitted work for this task from ${when(b.savedAt)}: ${n} segment${n === 1 ? "" : "s"}. Restore it?`;
+        }
+      },
       setStore(s) {
         store = s;
         setNote("");

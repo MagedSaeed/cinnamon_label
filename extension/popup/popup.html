@@ -50,6 +50,10 @@
             <span><b>Use Cinnamon Label<button type="button" class="tip" aria-label="About Use Cinnamon Label" data-tip="Shows the Cinnamon Label editor on Label Studio task pages. Turn it off to get Label Studio exactly as it was; reload the task page afterwards. You can also switch per task with the “Switch to native UI” button.">i</button></b><small>On Label Studio task pages</small></span>
             <input type="checkbox" id="enabled"><i></i>
           </label>
+          <label class="switch" for="noDrafts">
+            <span><b>Stop draft auto-save<button type="button" class="tip" aria-label="About Stop draft auto-save" data-tip="The server refuses Label Studio's automatic draft saves, which shows “Runtime error: Forbidden”. With this on, Label Studio stops trying, and Cinnamon Label keeps a backup of each task's unsubmitted work in this browser instead, offering to restore it if the page reloads. Takes effect on the next page load.">i</button></b><small>Keep a local backup instead</small></span>
+            <input type="checkbox" id="noDrafts"><i></i>
+          </label>
         </section>
         <section>
           <h2>Downloads</h2>

@@ -2,7 +2,7 @@
 // Saved videos live in the Label Studio site's storage, which the popup can't reach, so deletions
 // are queued in chrome.storage.local ("clCacheDeletes") and applied by a Label Studio tab.
 const U = globalThis.CLU;
-const DEFAULTS = { enabled: true, connections: 3, cacheLimitGB: 2, devReload: false };
+const DEFAULTS = { enabled: true, connections: 3, cacheLimitGB: 2, noDrafts: true, devReload: false };
 const el = (id) => document.getElementById(id);
 
 // ---------- tabs ----------
@@ -31,6 +31,7 @@ selectTab(localStorage.getItem("clPopupTab") || "general");
 function write(s) {
   el("enabled").checked = !!s.enabled;
   el("devReload").checked = !!s.devReload;
+  el("noDrafts").checked = !!s.noDrafts;
   const r = document.querySelector(`input[name=connections][value="${s.connections}"]`) || document.querySelector('input[name=connections][value="3"]');
   r.checked = true;
   el("cacheLimitGB").value = String(s.cacheLimitGB);
@@ -41,6 +42,7 @@ function read() {
   return {
     enabled: el("enabled").checked,
     devReload: el("devReload").checked,
+    noDrafts: el("noDrafts").checked,
     connections: Number(document.querySelector("input[name=connections]:checked")?.value) || DEFAULTS.connections,
     cacheLimitGB: Number(el("cacheLimitGB").value) || DEFAULTS.cacheLimitGB,
   };
