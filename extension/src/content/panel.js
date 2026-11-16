@@ -49,7 +49,9 @@
 .ch .mini{grid-column:2 / -1; display:block; width:100%; height:22px; margin-top:4px}
 @media (prefers-reduced-motion:reduce){ .card{transition:none} }
 /* play this segment (beside the header: a button can't contain another button) */
-.cplay{align-self:stretch; display:grid; place-items:start center; width:40px; padding:12px 0 0 8px; border:0; background:none; color:var(--muted)}
+.cplay{position:relative; align-self:stretch; display:grid; place-items:start center; width:48px; padding:12px 4px 0 8px; border:0; background:none; color:var(--muted)}
+/* a light divider between the play button and the header */
+.cplay::after{content:""; position:absolute; right:0; top:10px; bottom:10px; width:1px; background:#e9ecf0}
 .cplay span{display:grid; place-items:center; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--panel)}
 .cplay svg{width:12px; height:12px; fill:currentColor}
 .cplay:hover span{border-color:var(--cinnamon); color:var(--cinnamon)}
