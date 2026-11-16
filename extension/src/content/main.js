@@ -655,6 +655,17 @@
     });
 
     window.addEventListener("keydown", CL.guard(onKeyDown), true);
+    // Copy / cut / paste in our text fields are plain text editing: Label Studio's own handlers
+    // (copy the selected region, paste regions) must not see them. The browser still does the
+    // copy or paste itself (we don't prevent it).
+    for (const ev of ["copy", "cut", "paste"])
+      window.addEventListener(
+        ev,
+        (e) => {
+          if (!stopped && inOverlay(e) && CL.isTypingTarget(target(e))) e.stopImmediatePropagation();
+        },
+        true
+      );
     window.addEventListener("keyup", CL.guard(onKeyUp), true);
     window.addEventListener("keypress", CL.guard(onKeyPress), true);
     window.addEventListener("pointerdown", CL.guard(onPointerDown), true);

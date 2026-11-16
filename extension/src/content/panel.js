@@ -424,7 +424,11 @@
       if (!r || !rangeSeg || !store) return;
       const g = store.byId(rangeSeg);
       if (!g) {
-        rangeSeg = null; // deleted or merged away
+        // Deleted or merged away while it played: stop, rather than loop over a range that's gone.
+        rangeSeg = null;
+        player._range = null;
+        player.setLoop(false);
+        player.v.pause();
         return;
       }
       if (Math.abs(g.start - r[0]) < 1e-6 && Math.abs(g.end - r[1]) < 1e-6) return;
