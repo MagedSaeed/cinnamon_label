@@ -74,7 +74,7 @@
 .ch .sub{grid-column:2 / -1; display:flex; flex-wrap:wrap; gap:4px; margin-top:2px}
 .ch .sub .tag{padding:1px 7px; border:1px solid var(--line); border-radius:999px; background:#f3f4f6; color:#3d4452; font-size:12px; line-height:1.5; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 /* Skipped: full strength (still clickable), marked by faint diagonal stripes and a dashed skip tag. */
-.card.skipped{background:repeating-linear-gradient(135deg, #fff 0 9px, #f9fafb 9px 18px)}
+.card.skipped{background:linear-gradient(to bottom, #fff 62%, rgba(255,255,255,0) 92%), repeating-linear-gradient(135deg, #fff 0 9px, #f6f7f9 9px 18px)}
 .card.skipped .ch .sub .tag[data-k="skip"]{border-style:dashed; background:#fff}
 .ch .sub .tag[data-k="m"]{background:#e7f0fb; border-color:#b9d3f1; color:#1f4f8a; font-weight:600}
 .ch .sub .tag[data-k="f"]{background:#fbe9f1; border-color:#f0bfd4; color:#8a2554; font-weight:600}
