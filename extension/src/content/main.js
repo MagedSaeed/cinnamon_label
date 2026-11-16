@@ -370,6 +370,26 @@
       task.makeStore(); // another annotation tab: its own segments
     }
     render(st);
+    checkOldExtension();
+  }
+
+  // The old SpeakerCut extension (its row has id "lsp-root"): presegmentation is built in now.
+  let oldExtChecked = false;
+  function checkOldExtension() {
+    if (oldExtChecked || !document.getElementById("lsp-root")) return;
+    oldExtChecked = true;
+    chrome.storage.local.get({ clOldExtNoticeOff: false }, (o) => panel && panel.showOldExtNotice(!o.clOldExtNoticeOff));
+  }
+
+  // Presegmentation for the open task: suggestions only (the user accepts them).
+  async function runPreseg(onStatus) {
+    const t = task;
+    if (!t || !t.store) throw new Error("Open a task first.");
+    const s = await CL.settings();
+    const res = await CL.preseg.run(t.audio, s, onStatus);
+    if (t !== task || t.dead) throw new Error("The task changed while presegmenting, so nothing was suggested.");
+    t.store.setSuggestions(res.segments);
+    return res;
   }
 
   function setMode(mode) {
@@ -506,6 +526,7 @@
       player,
       timeline: ui.timeline,
       textFields: () => (task && task.store ? task.store.textFields : []),
+      presegment: runPreseg,
     });
     panel.setUi(ui);
     ui.onNative(() => setMode("native"));

@@ -178,6 +178,18 @@
       return this.segments.find((g) => g.id === id) || null;
     }
 
+    // Presegmentation suggestions: shown on the timeline, never written to Label Studio until the
+    // user accepts them (they then become normal segments through apply()).
+    setSuggestions(list) {
+      this.suggestions = (list || []).map((s, i) => ({ ...s, key: `s${i}` }));
+      this._emit();
+    }
+    dropSuggestions(keys) {
+      const drop = new Set(keys);
+      this.suggestions = (this.suggestions || []).filter((s) => !drop.has(s.key));
+      this._emit();
+    }
+
     destroy() {
       this._dead = true;
       for (const t of this._textTimers.values()) clearTimeout(t.timer);

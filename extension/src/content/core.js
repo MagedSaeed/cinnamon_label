@@ -14,6 +14,18 @@
     cacheLimitGB: 2,
     noDrafts: true, // pause Label Studio's draft auto-save (the server refuses it); we keep a local backup
     devReload: false,
+    // presegmentation (the user's diarization server; same rules as the old SpeakerCut)
+    psServer: "http://127.0.0.1:8000",
+    psProvider: "local",
+    psRemoveMusic: false,
+    psMaxDur: 30,
+    psPad: 0.2,
+    psMinSeg: 1.0,
+    psNum: 0,
+    psMin: 0,
+    psMax: 0,
+    psDropOverlap: true,
+    psTimeoutMin: 3, // give up on a presegmentation run after this many minutes
   };
   CL.settings = () => new Promise((r) => chrome.storage.sync.get(CL.DEFAULTS, r));
   CL.alive = () => {

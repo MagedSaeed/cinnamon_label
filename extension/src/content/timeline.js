@@ -29,6 +29,9 @@
     segEdge: "#7d8594",
     segTag: "#7d8594",
     segOv: "#9aa1ad",
+    sugFill: "rgba(61,68,82,0.035)",
+    sugLine: "#6f7785",
+    sugOv: "#a7aebb",
   };
   const STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
   const MIN_SPAN = 1;
@@ -176,6 +179,7 @@
       const toX = (t) => ((t - this.viewStart) / this.span) * w;
       let best = null;
       for (const g of this.segs) {
+        if (g.id === "__new") continue; // the "Add segment" preview has no handles
         for (const edge of ["start", "end"]) {
           const d = Math.abs(toX(g[edge]) - x);
           const pref = this.store && g.id === this.store.selected ? -0.5 : 0;
@@ -211,8 +215,16 @@
       if (edge) this.drag = { kind: "edge", id: edge.id, edge: edge.edge, base, x0: x };
       else {
         const inside = globalThis.CLSeg.segmentAt(base, t);
-        this.drag = inside ? { kind: "select", id: inside.id, x0: x } : { kind: "create", t0: this._snap(t, e), base, x0: x };
+        // On a suggestion (outside real segments): a click adds it, a drag still creates a segment.
+        const sug = !inside && this.editable ? this._sugAt(t) : null;
+        this.drag = inside ? { kind: "select", id: inside.id, x0: x } : { kind: "create", t0: this._snap(t, e), base, x0: x, sug };
       }
+    }
+    get sugs() {
+      return (this.store && this.store.suggestions) || [];
+    }
+    _sugAt(t) {
+      return this.sugs.find((s) => s.start <= t && s.end >= t) || null;
     }
     _move(e) {
       const x = this._localX(e);
@@ -221,7 +233,11 @@
       const d = this.drag;
       if (!d) {
         this.hoverEdge = this.editable ? this._edgeAt(x) : null;
-        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : this.editable && !S.segmentAt(this.segs, this._xToTime(e)) ? "crosshair" : "pointer";
+        const t = this._xToTime(e);
+        const inSeg = S.segmentAt(this.segs, t);
+        const sug = !this.hoverEdge && !inSeg && this.editable ? this._sugAt(t) : null;
+        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : sug ? "copy" : this.editable && !inSeg ? "crosshair" : "pointer";
+        this.dt.title = sug ? `Click to add this suggested segment (${sug.speaker}), or drag to make your own.` : "";
         return this.invalidate();
       }
       d.moved = d.moved || Math.abs(x - d.x0) > 3;
@@ -246,6 +262,11 @@
       const t = this._xToTime(e);
       const store = this.store;
       if (!d.moved) {
+        if (d.sug && this.onSuggestion) {
+          this.onSuggestion(d.sug); // add the clicked suggestion as a real segment
+          this.invalidate();
+          return;
+        }
         if (d.kind === "select" || d.kind === "edge") {
           if (store) store.select(d.id);
         } else if (store) store.select(null);
@@ -421,6 +442,13 @@
             ctx.fillStyle = g.id === sel ? C.accent : C.segOv;
             ctx.fillRect(x0, 0, Math.max(dpr, ((g.end - g.start) / d) * w), 3 * dpr);
           }
+          // suggestions band (dotted, just under the segments band)
+          ctx.fillStyle = C.sugOv;
+          for (const s of this.sugs) {
+            const x0 = (s.start / d) * w;
+            const x1 = (s.end / d) * w;
+            for (let x = x0; x < x1; x += 4 * dpr) ctx.fillRect(x, 4 * dpr, Math.min(2 * dpr, x1 - x), 2 * dpr);
+          }
           // detail window
           const vx = (this.viewStart / d) * w;
           const vw = Math.max(2, (this.span / d) * w);
@@ -500,6 +528,26 @@
           }
           ctx.fillStyle = C.tick;
           ctx.fillRect(0, rulerH, w, dpr);
+          // presegmentation suggestions (dashed, behind everything; real segments draw over them)
+          ctx.save();
+          ctx.setLineDash([5 * dpr, 4 * dpr]);
+          ctx.lineWidth = 1.5 * dpr;
+          ctx.font = `600 ${10 * dpr}px system-ui, sans-serif`;
+          ctx.textBaseline = "middle";
+          for (const s of this.sugs) {
+            const x0 = toX(s.start);
+            const x1 = toX(s.end);
+            if (x1 < 0 || x0 > w) continue;
+            ctx.fillStyle = C.sugFill;
+            ctx.fillRect(x0, rulerH + dpr, x1 - x0, h - rulerH - dpr);
+            ctx.strokeStyle = C.sugLine;
+            ctx.strokeRect(x0 + dpr, rulerH + 2 * dpr, x1 - x0 - 2 * dpr, h - rulerH - 4 * dpr);
+            if (x1 - x0 > 26 * dpr) {
+              ctx.fillStyle = C.sugLine;
+              ctx.fillText(s.speaker || "", Math.max(x0, 0) + 5 * dpr, h - 10 * dpr);
+            }
+          }
+          ctx.restore();
           // segment blocks (behind the waveform)
           const sel = this.store && this.store.selected;
           const segs = this.segs;

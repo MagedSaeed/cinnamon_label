@@ -15,7 +15,15 @@
 .ph{display:flex; align-items:baseline; gap:8px}
 .ph h2{margin:0; font-size:14px; font-weight:650}
 .ph .count{color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums}
+.ph{align-items:center}
 .ph .sum{margin-left:auto; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+.sugbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border:1px dashed #9aa1ad; border-radius:8px; background:var(--surface)}
+.sugbar span{flex:1; min-width:220px; color:var(--ink)}
+.sugbar.busy span{color:var(--muted)}
+.sugbar.err{border-style:solid; border-color:#e8b4ae; background:#fdf3f2}
+.sugbar.err span{color:var(--err)}
+.oldnote{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border-radius:8px; background:#fff8e6; border:1px solid #f0dca8}
+.oldnote span{flex:1; min-width:220px}
 .icon{width:30px; height:30px; display:grid; place-items:center; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); padding:0; flex:none}
 .icon svg, .btn svg{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
 .icon:disabled{opacity:.35; cursor:default}
@@ -43,7 +51,9 @@
 .pill{padding:2px 10px; border-radius:999px; font-size:12px; white-space:nowrap}
 .pill.ok{background:#e7f3ed; color:var(--ok)}
 .pill.need{background:#fff; color:var(--cinnamon); border:1px solid #ead7cb}
-.empty{color:var(--muted); margin:0; max-width:52ch; line-height:1.5}
+.empty{margin:0; color:var(--ink); line-height:1.5}
+.empty .help2{display:block; margin-top:4px; color:var(--muted); font-size:12.5px}
+.empty .help2:empty{display:none}
 .btn{display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); white-space:nowrap; font-size:13px}
 .btn:hover:not(:disabled){border-color:#c9ced6}
 .btn:disabled{opacity:.4; cursor:default}
@@ -88,6 +98,7 @@
     del: `<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`,
     x: `<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>`,
     chev: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
+    spark: `<svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>`,
   };
 
   const fmtMs = (t) => {
@@ -97,11 +108,12 @@
     return `${m}:${s.toFixed(3).padStart(6, "0")}`;
   };
   const fmtDur = (d) => (d < 60 ? `${d.toFixed(d < 10 ? 2 : 1)} s` : U.fmtClock(d));
-  const EMPTY = "No segments yet. Press Add segment when someone starts speaking and Mark end when they stop, or drag across the waveform below.";
+  const EMPTY = "No segments yet. Use Add segment while it plays, drag across the waveform, or Presegment.";
 
   // container: the side panel; bar: the segment toolbar element above the waveform.
-  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields }) {
+  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment }) {
     let store = null;
+    let presegBusy = false;
     let form = null;
     let taskView = null;
     let segView = null;
@@ -123,9 +135,19 @@
           <button class="btn primary" id="rDo">Restore</button>
           <button class="btn" id="rNo">Discard</button>
         </div>
-        <div class="ph"><h2>Segments <span class="count" id="segCount"></span></h2><span class="sum" id="segSum"></span></div>
+        <div class="oldnote" id="oldNote" role="note" hidden>
+          <span>The old SpeakerCut extension is still installed. Cinnamon Label now includes presegmentation, so you can remove SpeakerCut in <b>chrome://extensions</b>.</span>
+          <button class="btn" id="oldX">Got it</button>
+        </div>
+        <div class="ph"><h2>Segments <span class="count" id="segCount"></span></h2><span class="sum" id="segSum"></span>
+          <button class="btn" id="aPre" title="Suggest segments by speaker (nothing is added until you accept)">${I.spark}Presegment</button></div>
+        <div class="sugbar" id="sugBar" role="status" hidden>
+          <span id="sugTxt"></span>
+          <button class="btn primary" id="sugAll">Add all</button>
+          <button class="btn" id="sugClear">Dismiss</button>
+        </div>
         <div class="cards" id="cards" role="list" aria-label="Segments"></div>
-        <p class="empty" id="segEmpty">${EMPTY}</p>
+        <p class="empty" id="segEmpty"><span id="segEmptyMain">${EMPTY}</span><span class="help2" id="segEmptyHelp"></span></p>
         <div hidden id="holder"><div class="cb" id="detail"><p class="note" id="dNote"></p><div id="form"></div></div></div>
         <p class="ro" id="readOnly" hidden>This annotation is read-only. You can play and review it, but not edit it.</p>
       </div>`;
@@ -160,9 +182,9 @@
     let emptyText = EMPTY;
     const flash = (t, err = false) => {
       setNote(t, err);
-      $("segEmpty").textContent = t;
+      $("segEmptyMain").textContent = t;
       clearTimeout(flashTimer);
-      flashTimer = setTimeout(() => ($("segEmpty").textContent = emptyText), 5000);
+      flashTimer = setTimeout(() => ($("segEmptyMain").textContent = emptyText), 5000);
       if (ui && ui.toast) ui.toast(t);
     };
     const refreshHistory = () =>
@@ -303,6 +325,53 @@
       refreshHistory();
     });
 
+    // ---- presegmentation suggestions (shown only; added when the user accepts them) ----
+    let sugMsg = null; // { text, kind: "busy" | "err" } while running or after a failure
+    const setSugMsg = (text, kind, detail) => {
+      sugMsg = text ? { text, kind, detail } : null;
+      api.render();
+    };
+    CL.on($("aPre"), "click", async () => {
+      if (!presegment || presegBusy || !editable()) return;
+      presegBusy = true;
+      setSugMsg("Starting presegmentation…", "busy");
+      try {
+        const r = await presegment((t) => setSugMsg(t, "busy"));
+        setSugMsg(null);
+        if (!r.segments.length) flash("Presegmentation found no clear single-speaker segments in this video.", true);
+      } catch (e) {
+        setSugMsg((e && e.message) || String(e), "err", e && e.detail);
+      } finally {
+        presegBusy = false;
+        api.render();
+      }
+    });
+    async function acceptSuggestion(s) {
+      if (!editable()) return;
+      const fit = S.fitInto(base(), s.start, s.end, D());
+      store.dropSuggestions([s.key]);
+      if (!fit) return flash("That suggestion lies inside existing segments; there is no free time left for it.", true);
+      focusNext = true;
+      await store.apply({ create: [fit], update: [], remove: [] }, { select: "created" });
+    }
+    timeline.onSuggestion = (s) => acceptSuggestion(s).catch(CL.warn);
+    CL.on($("sugAll"), "click", async () => {
+      if (!editable()) return;
+      const r = S.addMany(base(), store.suggestions || [], D());
+      store.setSuggestions([]);
+      if (r.added) await store.apply(r.plan);
+      flash(`Added ${r.added} segment${r.added === 1 ? "" : "s"}${r.skipped ? `; ${r.skipped} skipped (no free time)` : ""}. Check each one; Undo removes them all.`);
+    });
+    CL.on($("sugClear"), "click", () => {
+      sugMsg = null;
+      if (store) store.setSuggestions([]);
+      api.render();
+    });
+    CL.on($("oldX"), "click", () => {
+      chrome.storage.local.set({ clOldExtNoticeOff: true });
+      $("oldNote").hidden = true;
+    });
+
     // ---- backup offer ----
     let backup = null;
     const when = (ts) => new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -403,8 +472,8 @@
         const taskFields = (f && f.task.filter((i) => i.kind === "choices" || i.kind === "textarea")) || [];
         $("whole").hidden = !links.children.length && !taskFields.length;
         taskView = f && f.task.length ? new CL.FormView($("taskForm"), { items: f.task, onChange: (name, v, o) => store && store.setField(null, name, v, o) }) : null;
-        emptyText = [EMPTY].concat((f && f.segmentHelp) || []).join(" ");
-        $("segEmpty").textContent = emptyText;
+        // The project's own instruction goes on its own line, below ours.
+        $("segEmptyHelp").textContent = ((f && f.segmentHelp) || []).join(" ");
         segView = f
           ? new CL.FormView($("form"), {
               items: f.segment,
@@ -429,6 +498,9 @@
         backup = b;
         api.showOffer(b ? b.offer : null);
       },
+      showOldExtNotice(on) {
+        $("oldNote").hidden = !on;
+      },
       showOffer(b) {
         $("restore").hidden = !b;
         if (b) {
@@ -447,6 +519,27 @@
         $("skipNote").hidden = !hiddenSegs;
         timeline.segmentsDisabled = hiddenSegs;
         const g = sel();
+
+        // presegmentation
+        const sugs = (store && store.suggestions) || [];
+        const sb = $("sugBar");
+        $("aPre").hidden = !presegment;
+        $("aPre").disabled = presegBusy || !canEdit;
+        if (sugMsg) {
+          sb.hidden = false;
+          sb.className = "sugbar " + sugMsg.kind;
+          $("sugTxt").textContent = sugMsg.text;
+          $("sugTxt").title = sugMsg.detail && sugMsg.detail !== sugMsg.text ? sugMsg.detail : "";
+          $("sugAll").hidden = true;
+          $("sugClear").hidden = sugMsg.kind !== "err";
+        } else if (sugs.length) {
+          sb.hidden = false;
+          sb.className = "sugbar";
+          const sp = new Set(sugs.map((s) => s.speaker)).size;
+          $("sugTxt").textContent = `${sugs.length} suggested segment${sugs.length === 1 ? "" : "s"}, ${sp} speaker${sp === 1 ? "" : "s"}. Click one on the waveform to add it, or add them all.`;
+          $("sugAll").hidden = false;
+          $("sugClear").hidden = false;
+        } else sb.hidden = true;
 
         // cards, in time order; open = the selected segment
         const list = $("cards");

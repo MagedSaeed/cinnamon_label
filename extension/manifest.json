@@ -9,7 +9,9 @@
     "unlimitedStorage"
   ],
   "host_permissions": [
-    "https://annotation.dlnlp.ai/*"
+    "https://annotation.dlnlp.ai/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -51,6 +53,7 @@
         "src/content/timeline.js",
         "src/content/segstore.js",
         "src/content/backup.js",
+        "src/content/preseg.js",
         "src/content/form.js",
         "src/content/panel.js",
         "src/content/overlay.js",

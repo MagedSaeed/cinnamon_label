@@ -61,6 +61,22 @@ test("split, merge, remove, setTimes", () => {
   assert.equal(S.setTimes(segs(), "c", 45, 45.05, D), null);
 });
 
+test("fitInto keeps the largest free part; addMany never overlaps", () => {
+  // existing: a 10-20, b 20-30, c 40-50
+  assert.deepEqual(S.fitInto(segs(), 32, 38, D), { start: 32, end: 38 }, "fully free");
+  assert.deepEqual(S.fitInto(segs(), 25, 45, D), { start: 30, end: 40 }, "trimmed to the gap");
+  assert.deepEqual(S.fitInto(segs(), 5, 60, D), { start: 30, end: 40 }, "largest of 5-10, 30-40, 50-60 (a tie keeps the earlier)");
+  assert.deepEqual(S.fitInto(segs(), 5, 65, D), { start: 50, end: 65 }, "a strictly larger later part wins");
+  assert.equal(S.fitInto(segs(), 12, 18, D), null, "inside a segment");
+  assert.equal(S.fitInto(segs(), 29.95, 30.05, D), null, "too small");
+  const r = S.addMany(segs(), [{ start: 55, end: 70 }, { start: 32, end: 45 }, { start: 15, end: 18 }, { start: 60, end: 65 }], D);
+  assert.equal(r.added, 2);
+  assert.equal(r.skipped, 2, "one inside a segment, one inside an earlier suggestion");
+  const out = S.apply(segs(), r.plan);
+  assert.deepEqual(S.validate(out, D), []);
+  assert.deepEqual(out.map((g) => [g.start, g.end]), [[10, 20], [20, 30], [32, 40], [40, 50], [55, 70]]);
+});
+
 // Random sequences of operations must never break the invariants.
 test("thousands of random edits keep segments valid", () => {
   let seed = 42;

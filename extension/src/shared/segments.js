@@ -70,6 +70,41 @@
     return { plan, segment: { start, end } };
   };
 
+  // The largest part of [a, b] not covered by any segment (for adding a suggested segment without
+  // overlapping existing ones). Returns { start, end } or null if nothing useful is free.
+  S.fitInto = function fitInto(segs, a, b, duration) {
+    let lo = Math.max(0, Math.min(a, b));
+    const hi = Math.min(duration, Math.max(a, b));
+    let best = null;
+    for (const g of sorted(segs)) {
+      if (g.end <= lo + EPS) continue;
+      if (g.start >= hi - EPS) break;
+      if (g.start > lo + EPS && (!best || g.start - lo > best.end - best.start)) best = { start: lo, end: g.start };
+      lo = Math.max(lo, g.end);
+      if (lo >= hi) break;
+    }
+    if (hi > lo + EPS && (!best || hi - lo > best.end - best.start)) best = { start: lo, end: hi };
+    if (!best || best.end - best.start < MIN_DUR) return null;
+    return { start: round(best.start), end: round(best.end) };
+  };
+
+  // Add several suggested ranges at once (in time order), each trimmed to free time.
+  // Returns { plan, added, skipped }.
+  S.addMany = function addMany(segs, ranges, duration) {
+    const plan = emptyPlan();
+    let list = segs.map((g) => ({ id: g.id, start: g.start, end: g.end }));
+    let added = 0;
+    let skipped = 0;
+    [...ranges].sort((x, y) => x.start - y.start).forEach((r, i) => {
+      const fit = S.fitInto(list, r.start, r.end, duration);
+      if (!fit) return skipped++;
+      plan.create.push(fit);
+      list = sorted(list.concat({ id: `__add${i}`, ...fit }));
+      added++;
+    });
+    return { plan, added, skipped };
+  };
+
   // Move one edge of segment `id` to time t. A neighbour that touches this edge moves with it
   // (shared boundary), unless `detach` is true. Clamped so nothing overlaps or gets too short.
   S.moveEdge = function moveEdge(segs, id, edge, t, duration, { detach = false } = {}) {
