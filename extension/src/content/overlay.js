@@ -97,6 +97,7 @@ video:not([data-ready]){visibility:hidden}
 .zoom input:focus{border-color:var(--cinnamon); background:var(--panel); outline:none}
 .speed{display:flex; align-items:center; gap:6px; color:var(--muted)}
 .speed select{font:inherit; border:1px solid var(--line); border-radius:6px; padding:3px 6px; background:var(--panel); color:var(--ink)}
+.speed input{width:56px; font:inherit; border:1px solid var(--cinnamon); border-radius:6px; padding:3px 6px; background:var(--panel); color:var(--ink); outline:none; box-shadow:0 0 0 3px var(--cinnamon-soft)}
 @media (prefers-reduced-motion:reduce){ .net .meter b{transition:none} }
 `;
 
@@ -173,7 +174,9 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
             <select id="rate" aria-label="Playback speed">
               <option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option>
               <option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
+              <option value="custom">Custom…</option>
             </select>
+            <input id="rateTxt" hidden spellcheck="false" autocomplete="off" inputmode="decimal" aria-label="Custom playback speed" title="Type a speed from 0.25 to 4, e.g. 1.3, then press Enter">
           </label>
           </div>
         </footer>
@@ -419,7 +422,48 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         CL.on(v, "canplay", () => api.setStageMessage(""));
         CL.on(v, "click", () => player.toggle());
         CL.on(play, "click", () => player.toggle());
-        CL.on($("rate"), "change", (e) => player.setRate(Number(e.target.value)));
+        // Speed: a preset, or "Custom…" to type any speed from 0.25× to 4× (Chrome mutes beyond).
+        const rateSel = $("rate");
+        const rateTxt = $("rateTxt");
+        let rateNow = 1;
+        const showRate = (r) => {
+          const v = String(r);
+          let opt = [...rateSel.options].find((o) => o.value === v);
+          if (!opt) {
+            rateSel.querySelectorAll("option[data-custom]").forEach((o) => o.remove());
+            opt = new Option(`${v}×`, v);
+            opt.dataset.custom = "1";
+            rateSel.insertBefore(opt, rateSel.querySelector('option[value="custom"]'));
+          }
+          rateSel.value = v;
+        };
+        const applyRate = (r) => {
+          rateNow = Math.round(Math.min(4, Math.max(0.25, r)) * 100) / 100;
+          player.setRate(rateNow);
+          showRate(rateNow);
+        };
+        const closeCustom = (apply) => {
+          if (rateTxt.hidden) return;
+          const r = parseFloat(String(rateTxt.value).replace(",", ".").replace(/[×x]/gi, ""));
+          rateTxt.hidden = true;
+          rateSel.hidden = false;
+          if (apply && r > 0) applyRate(r);
+          else showRate(rateNow);
+        };
+        CL.on(rateSel, "change", () => {
+          if (rateSel.value !== "custom") return applyRate(Number(rateSel.value));
+          rateSel.hidden = true;
+          rateTxt.hidden = false;
+          rateTxt.value = String(rateNow);
+          rateTxt.focus();
+          rateTxt.select();
+        });
+        CL.onFieldKey(rateTxt, (e) => {
+          if (e.type !== "keydown") return;
+          if (e.key === "Enter") closeCustom(true);
+          else if (e.key === "Escape") closeCustom(false);
+        });
+        CL.on(rateTxt, "blur", () => closeCustom(true));
         paint();
 
         // Timeline lanes; the zoom label follows the detail lane's width.
