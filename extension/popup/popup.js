@@ -8,6 +8,8 @@ const DEFAULTS = {
   cacheLimitGB: 2,
   noDrafts: true,
   devReload: false,
+  nudgeMs: 50,
+  nudgeShiftMs: 250,
   psServer: "http://127.0.0.1:8000",
   psProvider: "local",
   psRemoveMusic: false,
@@ -55,6 +57,8 @@ function write(s) {
   const r = document.querySelector(`input[name=connections][value="${s.connections}"]`) || document.querySelector('input[name=connections][value="3"]');
   r.checked = true;
   el("cacheLimitGB").value = String(s.cacheLimitGB);
+  if (document.activeElement !== el("nudgeMs")) el("nudgeMs").value = String(s.nudgeMs);
+  if (document.activeElement !== el("nudgeShiftMs")) el("nudgeShiftMs").value = String(s.nudgeShiftMs);
   el("status").dataset.state = s.enabled ? "ok" : "off";
   el("statusText").textContent = s.enabled ? "Active" : "Off";
   // presegmentation
@@ -71,6 +75,8 @@ function read() {
     noDrafts: el("noDrafts").checked,
     connections: Number(document.querySelector("input[name=connections]:checked")?.value) || DEFAULTS.connections,
     cacheLimitGB: Number(el("cacheLimitGB").value) || DEFAULTS.cacheLimitGB,
+    nudgeMs: Math.max(1, Math.min(2000, Math.round(Number(el("nudgeMs").value)))) || DEFAULTS.nudgeMs,
+    nudgeShiftMs: Math.max(1, Math.min(5000, Math.round(Number(el("nudgeShiftMs").value)))) || DEFAULTS.nudgeShiftMs,
     psServer: el("psServer").value.trim() || DEFAULTS.psServer,
     psProvider: document.querySelector("input[name=psProvider]:checked")?.value || DEFAULTS.psProvider,
     psRemoveMusic: el("psRemoveMusic").checked,

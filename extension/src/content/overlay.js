@@ -75,6 +75,10 @@ video:not([data-ready]){visibility:hidden}
 /* Timeline lanes (drawn by timeline.js) */
 .lanes{padding:4px 14px 12px}
 .lanes canvas{display:block; width:100%}
+.lane{position:relative}
+.lanelab{position:absolute; right:6px; top:3px; padding:1px 7px; border-radius:999px; background:rgba(255,255,255,.88);
+  border:1px solid var(--line); color:var(--muted); font-size:11px; pointer-events:none; font-variant-numeric:tabular-nums}
+.lane:has(.dt) .lanelab{top:24px}
 .ov{height:40px; cursor:pointer; border-radius:4px}
 .dt{height:150px; border:1px solid var(--line); border-radius:6px}
 .zoom{display:flex; align-items:center; gap:2px; color:var(--muted); font-variant-numeric:tabular-nums}
@@ -145,8 +149,8 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         </footer>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <section class="lanes">
-          <canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas>
-          <canvas class="dt" id="dt" aria-label="Detail. Click to jump."></canvas>
+          <div class="lane"><canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas><span class="lanelab">Whole video</span></div>
+          <div class="lane"><canvas class="dt" id="dt" aria-label="Close-up. Click to jump, drag to make a segment."></canvas><span class="lanelab" id="dtLab">Close-up</span></div>
         </section>
       </div>`);
     root.appendChild(app);
@@ -335,6 +339,8 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
             if (root.activeElement === box) return; // don't overwrite while the user is typing
             const label = spanLabel(tl.span);
             if (box.value !== label) box.value = label;
+            const lab = `Close-up · ${label}`;
+            if ($("dtLab").textContent !== lab) $("dtLab").textContent = lab;
           },
         });
         // The width is editable: click, type 8 / 8.5 / 1:30, Enter applies, Esc cancels.

@@ -70,6 +70,11 @@
       </div>
       <div class="col">
         <section>
+          <h2>Editing</h2>
+          <label class="num inline" for="nudgeMs"><span>Nudge step<button type="button" class="tip" aria-label="About Nudge step" data-tip="How far one click on the small − / + buttons beside a segment's start and end moves it.">i</button></span><span class="unit"><input type="number" min="1" max="2000" step="5" id="nudgeMs"><em>ms</em></span></label>
+          <label class="num inline" for="nudgeShiftMs"><span>Shift-click step<button type="button" class="tip" aria-label="About Shift-click step" data-tip="How far the same − / + buttons move the edge when you hold Shift while clicking: for bigger corrections.">i</button></span><span class="unit"><input type="number" min="1" max="5000" step="10" id="nudgeShiftMs"><em>ms</em></span></label>
+        </section>
+        <section>
           <h2>Development</h2>
           <label class="switch" for="devReload">
             <span><b>Reload on code changes<button type="button" class="tip" aria-label="About Reload on code changes" data-tip="While the extension is being built: when its files change, it reloads itself and refreshes open Label Studio tabs (never while edits are still being written). Leave it off for normal annotation.">i</button></b><small>For development only</small></span>

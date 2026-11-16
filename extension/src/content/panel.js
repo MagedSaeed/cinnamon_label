@@ -118,7 +118,7 @@
   const EMPTY = "No segments yet. Use Add segment while it plays, drag across the waveform, or Presegment.";
 
   // container: the side panel; bar: the segment toolbar element above the waveform.
-  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment }) {
+  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment, nudgeMs = () => 50, nudgeShiftMs = () => 250 }) {
     let store = null;
     let presegBusy = false;
     let form = null;
@@ -257,7 +257,7 @@
       if (!b || !editable()) return;
       const g = sel();
       if (!g) return;
-      const step = (e.shiftKey ? 0.25 : 0.05) * Number(b.dataset.dir);
+      const step = ((e.shiftKey ? nudgeShiftMs() : nudgeMs()) * Number(b.dataset.dir)) / 1000;
       const plan = S.moveEdge(base(), g.id, b.dataset.edge, g[b.dataset.edge] + step, D());
       if (!plan || !plan.update.length) return flash("That edge can't move further that way.", true);
       await store.apply(plan, { select: g.id });
@@ -627,7 +627,13 @@
           if (root.activeElement !== $("dEnd")) $("dEnd").value = fmtMs(g.end);
           $("dDur").textContent = fmtDur(g.end - g.start);
           for (const id of ["dStart", "dEnd"]) $(id).disabled = !canEdit;
-          bar.querySelectorAll(".nudge").forEach((n) => (n.disabled = !canEdit));
+          const ms = nudgeMs();
+          const fmtStep = (v) => (v >= 1000 ? `${v / 1000} s` : `${v} ms`);
+          bar.querySelectorAll(".nudge").forEach((n) => {
+            n.disabled = !canEdit;
+            const which = n.dataset.edge === "start" ? "Start" : "End";
+            n.title = `${which} ${fmtStep(ms)} ${n.dataset.dir < 0 ? "earlier" : "later"}. Hold Shift: ${fmtStep(nudgeShiftMs())}.`;
+          });
           for (const id of ["aSplit", "aDel"]) $(id).disabled = !canEdit;
           $("aMerge").disabled = !canEdit || i === segs.length - 1;
         }

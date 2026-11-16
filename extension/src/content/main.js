@@ -527,6 +527,8 @@
       timeline: ui.timeline,
       textFields: () => (task && task.store ? task.store.textFields : []),
       presegment: runPreseg,
+      nudgeMs: () => (settings && settings.nudgeMs) || 50,
+      nudgeShiftMs: () => (settings && settings.nudgeShiftMs) || 250,
     });
     panel.setUi(ui);
     ui.onNative(() => setMode("native"));
