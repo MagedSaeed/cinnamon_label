@@ -11,6 +11,14 @@
   const CSS = `
 :host{all:initial}
 *{box-sizing:border-box}
+/* slim scrollbars: a rounded thumb floating in a clear track */
+::-webkit-scrollbar{width:11px; height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background-color:rgba(93,101,115,.32); border:3px solid transparent; background-clip:padding-box; border-radius:999px; min-height:40px}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(93,101,115,.6)}
+::-webkit-scrollbar-thumb:active{background-color:#8a4b2a}
+::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-button{display:none; width:0; height:0}
 .app{
   --ink:#1d2129; --muted:#5d6573; --faint:#8c93a0; --line:#e3e6eb; --surface:#f5f6f8; --panel:#fff;
   --cinnamon:#8a4b2a; --cinnamon-soft:#f3e9e3; --ok:#2f7d5b; --warn:#9a6212; --err:#b42318;
