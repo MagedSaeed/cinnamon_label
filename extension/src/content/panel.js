@@ -78,7 +78,7 @@
 .card.skipped .ch .sub .tag[data-k="skip"]{border-style:dashed; background:#fff}
 .ch .sub .tag[data-k="m"]{background:#e7f0fb; border-color:#b9d3f1; color:#1f4f8a; font-weight:600}
 .ch .sub .tag[data-k="f"]{background:#fbe9f1; border-color:#f0bfd4; color:#8a2554; font-weight:600}
-.ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+.ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; /* the whole transcript, for reviewing */
   font-family:"Noto Naskh Arabic","Amiri","Scheherazade New","Noto Sans Arabic","Segoe UI",serif}
 .ch .pv.none{direction:ltr; text-align:left; font-family:inherit; font-size:12.5px; color:var(--faint); font-style:italic}
 .cb{padding:12px 14px 14px}
@@ -659,7 +659,7 @@
         const q = CFG.labelFor(form.segment, it) || it.name;
         if (it.kind === "choices" && ans.length && !(it.multiple && it.options.length === 1)) for (const a of ans) parts.push({ text: a, q });
         if (it.kind === "choices" && it.multiple && it.options.length === 1 && ans.length) parts.unshift({ text: it.options[0].label, q });
-        if (it.kind === "textarea" && !pv && (it.rows >= 3 || it.dir === "rtl") && ans.length) pv = ans.join(" ");
+        if (it.kind === "textarea" && !pv && (it.rows >= 3 || it.dir === "rtl") && ans.length) pv = ans.join("\n");
       }
       return { tags: parts, pv };
     }
