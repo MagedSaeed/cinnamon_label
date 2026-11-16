@@ -17,6 +17,10 @@
 .ph .count{color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums}
 .ph{align-items:center}
 .ph .sum{margin-left:auto; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+#aPre.running svg{animation:cl-spin 1.6s linear infinite; transform-origin:50% 50%}
+#aPre.running:disabled{opacity:1; color:var(--cinnamon)} /* busy, not unavailable */
+@keyframes cl-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){ #aPre.running svg{animation:none} }
 .sugbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border:1px dashed #9aa1ad; border-radius:8px; background:var(--surface)}
 .sugbar span{flex:1; min-width:220px; color:var(--ink)}
 .sugbar.busy span{color:var(--muted)}
@@ -644,6 +648,7 @@
         const ps = presegState();
         $("aPre").hidden = !presegment || !ps.enabled;
         $("aPre").disabled = presegBusy || !canEdit || ps.online === false;
+        $("aPre").classList.toggle("running", presegBusy); // the sparkle turns while it works
         $("aPre").title =
           ps.online === false
             ? "The presegmentation server isn't running (see the extension's Presegmentation tab)."
