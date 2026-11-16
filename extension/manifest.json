@@ -57,6 +57,7 @@
         "src/content/form.js",
         "src/content/panel.js",
         "src/content/overlay.js",
+        "src/content/prefetch.js",
         "src/content/main.js"
       ],
       "run_at": "document_idle"

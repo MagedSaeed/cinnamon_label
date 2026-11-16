@@ -127,11 +127,15 @@
       if (!this.store) this.makeStore();
       ui.setNet({ kind: "checking" });
       this.resetAudio();
-      let cached = null;
-      try {
-        cached = await CL.cache.get(this.key);
-      } catch (e) {
-        CL.warn("Could not read the saved copy:", e);
+      // A download already running for this video (look-ahead, or left behind when switching tasks)?
+      const pre = CL.prefetch.take(this.key);
+      let cached = pre && pre.blob ? pre.blob : null;
+      if (!cached && !pre) {
+        try {
+          cached = await CL.cache.get(this.key);
+        } catch (e) {
+          CL.warn("Could not read the saved copy:", e);
+        }
       }
       if (this.dead) return;
       if (cached) {
@@ -140,6 +144,7 @@
         ui.setStreaming(false);
         ui.setNet({ kind: "cached", total: cached.size });
         serveWaveform(this.key, cached);
+        CL.prefetch.after(this.taskId, settings); // look ahead: the next tasks' videos
         const read = CL.blobReader(cached);
         this.audioRead = read;
         await this.startAudio(read, cached.size);
@@ -149,18 +154,25 @@
       player.setNetwork(this.url);
       ui.setStreaming(true);
       ui.timeline.setMessage("The waveform fills in as the video downloads.");
-      this.dl = new CL.Downloader(this.url, {
-        connections: settings.connections,
-        onProgress: (p) => !this.dead && ui.setNet({ kind: "downloading", ...p }),
-        onChunk: () => this.pumpAudio(),
-        acquire: () => CL.acquireSlot(() => (document.visibilityState === "visible" ? 0 : 1)),
-      });
+      const onProgress = (p) => !this.dead && ui.setNet({ kind: "downloading", ...p });
+      const onChunk = () => this.pumpAudio();
+      const acquire = () => CL.acquireSlot(() => (document.visibilityState === "visible" ? 0 : 1));
+      if (pre) {
+        // Adopt the running download: it now reports here and gets the open task's priority.
+        this.dl = pre.dl;
+        Object.assign(this.dl, { onProgress, onChunk, acquire });
+        this.runP = pre.done;
+        this.adopted = true;
+      } else {
+        this.dl = new CL.Downloader(this.url, { connections: settings.connections, onProgress, onChunk, acquire });
+        this.runP = this.dl.run();
+      }
       const dl = this.dl;
       this.audioRead = async (o, n) => dl.readAvailable(o, n);
       dl.whenTotal.then((total) => !this.dead && this.startAudio((o, n) => CL.fetchRange(this.url, o, n), total)).catch(() => {});
       let blob;
       try {
-        blob = await dl.run();
+        blob = await this.runP;
       } catch (e) {
         if (this.dead) return;
         CL.warn("Download failed:", e);
@@ -178,10 +190,12 @@
       ui.setStreaming(false);
       serveWaveform(this.key, blob);
       ui.setNet({ kind: "saving", total: blob.size });
-      const r = await CL.cache
-        .put(this.key, blob, settings.cacheLimitGB * 1e9, { taskId: this.taskId, name: this.name })
-        .catch((e) => ({ saved: false, reason: String(e) }));
-      if (!this.dead) ui.setNet(r.saved ? { kind: "saved", total: blob.size } : { kind: "memory", total: blob.size, reason: r.reason });
+      // (An adopted download saves itself.)
+      const r = this.adopted
+        ? { saved: await CL.cache.has(this.key).catch(() => false) }
+        : await CL.cache.put(this.key, blob, settings.cacheLimitGB * 1e9, { taskId: this.taskId, name: this.name }).catch((e) => ({ saved: false, reason: String(e) }));
+      if (!this.dead) ui.setNet(r.saved ? { kind: "saved", total: blob.size } : { kind: "memory", total: blob.size, reason: r.reason || "not saved" });
+      CL.prefetch.after(this.taskId, settings); // now look ahead: the next tasks' videos
     }
 
     // ---------- audio: waveform peaks + 16 kHz copy, decoded once ----------
@@ -269,7 +283,10 @@
         panel.setStore(null);
         ui.setSync(null);
       }
-      if (this.dl) this.dl.abort();
+      // An unfinished download keeps going in the background and is saved (switching tasks
+      // shouldn't throw it away); coming back adopts it again.
+      if (this.dl && !this.blob && !this.dl.aborted && this.runP && !this.failed) CL.prefetch.continueInBackground(this.key, this.taskId, this.name, this.dl, this.runP, settings);
+      else if (this.dl && !this.blob) this.dl.abort();
       if (this.audio) this.audio.close();
       player.reset();
       ui.timeline.setAudio(null);
@@ -542,6 +559,7 @@
       nudgeShiftMs: () => (settings && settings.nudgeShiftMs) || 250,
     });
     panel.setUi(ui);
+    CL.prefetch.setStatusListener((s) => ui && ui.setAhead(s));
     ui.setCloseUp(!!settings.closeUp);
     ui.onNative(() => setMode("native"));
     ui.onBack(() => setMode("cinnamon"));

@@ -108,6 +108,7 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .unit input { padding-right: 22px; }
 .unit em { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 11.5px; color: var(--muted); pointer-events: none; }
 .segmented.two { grid-template-columns: 1fr 1fr; }
+.segmented.three { grid-template-columns: repeat(3, 1fr); }
 .num.inline { display: flex; align-items: center; gap: 10px; margin: 6px 0 8px; }
 .num.inline > span:first-child { margin: 0; }
 .num.inline .unit { width: 92px; }

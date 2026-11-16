@@ -15,6 +15,7 @@
     noDrafts: true, // pause Label Studio's draft auto-save (the server refuses it); we keep a local backup
     devReload: false,
     // presegmentation (the user's diarization server; same rules as the old SpeakerCut)
+    prefetchNext: 1, // look-ahead: how many next unannotated tasks' videos to download (0 = off)
     closeUp: false, // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
     nudgeMs: 50, // the -/+ buttons beside a segment's start and end
     nudgeShiftMs: 250, // the same buttons with Shift held

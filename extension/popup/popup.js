@@ -8,6 +8,7 @@ const DEFAULTS = {
   cacheLimitGB: 2,
   noDrafts: true,
   devReload: false,
+  prefetchNext: 1,
   closeUp: false,
   nudgeMs: 50,
   nudgeShiftMs: 250,
@@ -56,6 +57,7 @@ function write(s) {
   el("devReload").checked = !!s.devReload;
   el("noDrafts").checked = !!s.noDrafts;
   el("closeUp").checked = !!s.closeUp;
+  (document.querySelector(`input[name=prefetchNext][value="${s.prefetchNext}"]`) || document.querySelector('input[name=prefetchNext][value="1"]')).checked = true;
   const r = document.querySelector(`input[name=connections][value="${s.connections}"]`) || document.querySelector('input[name=connections][value="3"]');
   r.checked = true;
   el("cacheLimitGB").value = String(s.cacheLimitGB);
@@ -76,6 +78,7 @@ function read() {
     devReload: el("devReload").checked,
     noDrafts: el("noDrafts").checked,
     closeUp: el("closeUp").checked,
+    prefetchNext: Number(document.querySelector("input[name=prefetchNext]:checked")?.value ?? DEFAULTS.prefetchNext),
     connections: Number(document.querySelector("input[name=connections]:checked")?.value) || DEFAULTS.connections,
     cacheLimitGB: Number(el("cacheLimitGB").value) || DEFAULTS.cacheLimitGB,
     nudgeMs: Math.max(1, Math.min(2000, Math.round(Number(el("nudgeMs").value)))) || DEFAULTS.nudgeMs,
