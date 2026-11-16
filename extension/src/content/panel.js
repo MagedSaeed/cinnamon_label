@@ -89,7 +89,11 @@
 /* segment toolbar (above the waveform) */
 .segbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0}
 .segbar .sep{width:1px; height:22px; background:var(--line); margin:0 4px}
-.segbar .who{font-weight:650; color:var(--ink); white-space:nowrap}
+.segbar .who{display:inline-flex; align-items:center; gap:4px; padding:3px 4px 3px 10px; border-radius:999px; background:var(--cinnamon-soft);
+  font-weight:650; color:var(--cinnamon); white-space:nowrap}
+.segbar .who button{width:20px; height:20px; display:grid; place-items:center; padding:0; border:0; border-radius:50%; background:none; color:var(--cinnamon)}
+.segbar .who button:hover{background:#ecd6c9}
+.segbar .who svg{width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round}
 .segbar .hint{color:var(--muted); font-size:12.5px}
 .tgrp{display:inline-flex; align-items:center}
 .tgrp .tf{border-radius:0; border-left:0; border-right:0}
@@ -175,14 +179,14 @@
       <button class="icon" id="aCancel" title="Cancel (Esc)" aria-label="Cancel adding a segment" hidden>${I.x}</button>
       <span class="sep" aria-hidden="true"></span>
       <span class="hint" id="bHint">Select a segment to edit it.</span>
-      <span class="who" id="bWho" hidden></span>
+      <span class="who" id="bWho" hidden><span id="bWhoTxt"></span><button id="aUnsel" title="Unselect (Esc)" aria-label="Unselect this segment">${I.x}</button></span>
       <span class="tgrp" id="gStart" hidden><button class="nudge" data-edge="start" data-dir="-1" title="Start 0.05 s earlier (Shift: 0.25 s)" aria-label="Start earlier">−</button><input class="tf" id="dStart" spellcheck="false" autocomplete="off" aria-label="Segment start" title="Start (e.g. 12.5 or 0:12.500), Enter to apply"><button class="nudge" data-edge="start" data-dir="1" title="Start 0.05 s later (Shift: 0.25 s)" aria-label="Start later">+</button></span>
       <span class="dash" id="bDash" hidden>–</span>
       <span class="tgrp" id="gEnd" hidden><button class="nudge" data-edge="end" data-dir="-1" title="End 0.05 s earlier (Shift: 0.25 s)" aria-label="End earlier">−</button><input class="tf" id="dEnd" spellcheck="false" autocomplete="off" aria-label="Segment end" title="End (e.g. 14 or 0:14.000), Enter to apply"><button class="nudge" data-edge="end" data-dir="1" title="End 0.05 s later (Shift: 0.25 s)" aria-label="End later">+</button></span>
       <span class="dur" id="dDur" hidden></span>
       <button class="btn" id="aPlay" title="Play this segment" hidden>${I.play}Play</button>
-      <button class="btn" id="aSplit" title="Split this segment at the playhead" hidden>${I.split}Split</button>
-      <button class="btn" id="aMerge" title="Join this segment with the next one" hidden>${I.merge}Merge</button>
+      <button class="btn" id="aSplit" title="Split this segment at the playhead" hidden>${I.split}Split at playhead</button>
+      <button class="btn" id="aMerge" title="Join this segment with the next one" hidden>${I.merge}Merge with next</button>
       <button class="btn danger" id="aDel" title="Delete this segment (Undo brings it back)" hidden>${I.del}Delete</button>
       <span class="sep" aria-hidden="true"></span>
       <button class="icon" id="undo" title="Undo" aria-label="Undo">${I.undo}</button>
@@ -244,6 +248,7 @@
       await store.apply(r.plan, { select: "created" });
     });
     CL.on($("aCancel"), "click", stopMarking);
+    CL.on($("aUnsel"), "click", () => store && store.select(null));
 
     // ---- cards: the play button plays (or pauses) just that segment, without opening it ----
     const playingId = () => {
@@ -667,7 +672,7 @@
         $("bHint").hidden = !!g && !marking;
         $("bHint").textContent = marking ? "Let it play, then press Mark end where the speech stops." : canEdit ? "Select a segment to edit it." : "";
         if (g) {
-          $("bWho").textContent = `Segment ${i + 1}`;
+          $("bWhoTxt").textContent = `Segment ${i + 1}`;
           if (root.activeElement !== $("dStart")) $("dStart").value = fmtMs(g.start);
           if (root.activeElement !== $("dEnd")) $("dEnd").value = fmtMs(g.end);
           $("dDur").textContent = fmtDur(g.end - g.start);
