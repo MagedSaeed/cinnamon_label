@@ -37,7 +37,8 @@
 .card{display:grid; grid-template-columns:auto minmax(0,1fr); border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden}
 .cbody{grid-column:1 / -1}
 .card{transition:background-color .25s, border-color .25s}
-.card.passing{background:#fdf4e1; border-color:#e8c88a}
+.card.passing{border-color:#e6c27c; box-shadow:0 0 0 3px rgba(226,170,60,.14)}
+.ch .mini{grid-column:2 / -1; display:block; width:100%; height:22px; margin-top:4px}
 @media (prefers-reduced-motion:reduce){ .card{transition:none} }
 /* play this segment (beside the header: a button can't contain another button) */
 .cplay{align-self:stretch; display:grid; place-items:start center; width:40px; padding:12px 0 0 8px; border:0; background:none; color:var(--muted)}
@@ -262,6 +263,83 @@
       if (g) $("aSplit").disabled = !editable() || !S.split(base(), g.id, t, splitGapMs() / 1000);
     }
     for (const ev of ["timeupdate", "seeked"]) CL.on(player.v, ev, paintMarkEnd);
+
+    // ---- mini waveform at the bottom of each card's header ----
+    // The segment's own waveform in light gray; while the playhead is inside the segment, the part
+    // already played fills in (amber while reviewing, cinnamon for the selected segment) up to a
+    // small playhead. Redrawn only when something it shows has changed.
+    const MINI = { waveInk: "#9aa1ad", played: "#d9931f", playedSel: "#8a4b2a", mid: "#eceef2" };
+    function drawMini(c, g, t) {
+      const cv = c.mini;
+      if (!cv || !cv.isConnected || cv.clientWidth < 4) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.round(cv.clientWidth * dpr);
+      const h = Math.round(cv.clientHeight * dpr);
+      const dur = g.end - g.start;
+      const inside = t >= g.start && t < g.end && dur > 0;
+      const isSel = store && store.selected === g.id;
+      const px = inside ? Math.round(((t - g.start) / dur) * w) : -1;
+      const sig = [w, h, g.start, g.end, timeline.audioVersion, px, isSel].join("|");
+      if (cv.dataset.sig === sig) return;
+      cv.dataset.sig = sig;
+      if (cv.width !== w || cv.height !== h) {
+        cv.width = w;
+        cv.height = h;
+      }
+      const ctx = cv.getContext("2d");
+      ctx.clearRect(0, 0, w, h);
+      const mid = h / 2;
+      ctx.fillStyle = MINI.mid;
+      ctx.fillRect(0, Math.round(mid), w, dpr);
+      const gain = timeline.peakGain;
+      const step = 2 * dpr; // a bar every 2 px: a quiet, minimized look
+      const bar = Math.max(1, Math.round(dpr * 1.2));
+      const played = isSel ? MINI.playedSel : MINI.played;
+      for (let x = 0; x < w; x += step) {
+        const r = timeline.peaks(g.start + (x / w) * dur, g.start + ((x + step) / w) * dur);
+        if (!r) continue;
+        const a = Math.min(1, Math.max(r[1], -r[0]) * gain);
+        const bh = Math.max(dpr, a * (h - 2 * dpr));
+        // Light to dark with the signal: quiet parts fade, speech stands out.
+        ctx.globalAlpha = 0.3 + 0.7 * Math.sqrt(a);
+        ctx.fillStyle = x < px ? played : MINI.waveInk;
+        ctx.fillRect(x, mid - bh / 2, bar, bh);
+      }
+      ctx.globalAlpha = 1;
+      if (inside) {
+        ctx.fillStyle = played;
+        ctx.fillRect(Math.max(0, px - dpr), 0, 2 * dpr, h);
+      }
+    }
+    function drawMinis() {
+      if (!store) return;
+      const t = player.v.currentTime || 0;
+      for (const g of store.segments) {
+        const c = cards.get(g.id);
+        if (c) drawMini(c, g, t);
+      }
+    }
+    // While playing: keep the moving bar smooth (only the card under the playhead changes).
+    let miniRaf = 0;
+    const miniTick = () => {
+      miniRaf = 0;
+      if (!store) return;
+      const t = player.v.currentTime || 0;
+      for (const g of store.segments) {
+        const c = cards.get(g.id);
+        if (c && (c.mini.dataset.sig || "").split("|")[5] !== "-1") drawMini(c, g, t); // was inside: clear it
+        else if (c && t >= g.start && t < g.end) drawMini(c, g, t);
+      }
+      if (!player.v.paused) miniRaf = requestAnimationFrame(miniTick);
+    };
+    for (const ev of ["play", "seeked", "timeupdate"]) CL.on(player.v, ev, () => miniRaf || (miniRaf = requestAnimationFrame(miniTick)));
+    // As the audio decodes, the mini waveforms fill in.
+    setInterval(() => {
+      if (store && timeline.audioVersion !== drawMinis._v) {
+        drawMinis._v = timeline.audioVersion;
+        drawMinis();
+      }
+    }, 1000);
 
     // Reviewing: playing with no segment selected lights the card of the segment being played
     // (the waveform does the same), and keeps it in view.
@@ -555,9 +633,9 @@
       rootEl.className = "card";
       rootEl.dataset.id = id;
       rootEl.setAttribute("role", "listitem");
-      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span></button><div class="cbody"></div>`;
+      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span><canvas class="mini" aria-hidden="true"></canvas></button><div class="cbody"></div>`;
       const q = (s) => rootEl.querySelector(s);
-      c = { root: rootEl, play: q(".cplay"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), sub: q(".sub"), pv: q(".pv"), body: q(".cbody") };
+      c = { root: rootEl, play: q(".cplay"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), sub: q(".sub"), pv: q(".pv"), mini: q(".mini"), body: q(".cbody") };
       cards.set(id, c);
       return c;
     }
@@ -716,6 +794,8 @@
           c.root.remove();
           cards.delete(id);
         }
+
+        drawMinis();
 
         // the open card holds the form
         if (g) {

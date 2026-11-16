@@ -27,7 +27,7 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
   - Fine-tune start and end with the − / + buttons or by typing a time.
   - **Split at playhead**, **Merge with next**, **Delete**, **Undo** and **Redo** are in the toolbar.
   - Segments never overlap. **Split at playhead** leaves a small gap (100 ms by default, set in the popup) and the new part starts with empty answers; merging keeps the first segment's answers and joins the transcripts.
-- **Reviewing:** with no segment selected, playing the video lights up the segment being played, on the waveform and in the list.
+- **Reviewing:** each segment card shows a small waveform of its segment, shaded by loudness. While the video plays, the part already played fills in with a moving playhead; with no segment selected, the segment being played is also lit on the main waveform and its card stays in view.
 - **Replay segment** plays the open segment once; turn on **Loop** beside it to repeat it until you pause. **Next segment** is at the end of the form, beside the last question.
 - **Questions and transcript:** the open segment's card shows its questions and the transcript box. The whole-video questions are at the top of the side panel. Help notes from the project are at the end of the form.
 - **Presegment:** suggests segments, drawn dashed with speaker tags. Click one to add it, or use **Add all** / **Dismiss**. Nothing is added until you accept it. The button is disabled while the server isn't running.

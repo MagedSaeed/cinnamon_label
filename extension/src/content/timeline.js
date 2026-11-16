@@ -676,6 +676,18 @@
       }
     }
 
+    // For the segment cards' mini waveforms: [min, max] over [t0, t1], the loudness gain, and a
+    // version that changes as more audio is decoded.
+    peaks(t0, t1) {
+      return this._range(t0, t1);
+    }
+    get peakGain() {
+      return this.audio ? Math.min(4, 0.9 / Math.max(0.05, this._peak())) : 1;
+    }
+    get audioVersion() {
+      return this.audio ? this.audio.version : -1;
+    }
+
     // Loudest point decoded so far (cached per audio version).
     _peak() {
       const a = this.audio;
