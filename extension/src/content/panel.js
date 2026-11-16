@@ -639,8 +639,9 @@
       store.flushTexts();
       focusNext = true;
       store.select(nx.id);
-      player.seekTo(nx.start);
       timeline.revealSegment(nx);
+      // Play it right away: this replaces the previous replay (and its loop); it loops too if Loop is on.
+      player.playRange(nx.start, nx.end, { loop: loopOn() });
     }
 
     // ---- cards: created once per segment id, updated in place (never rebuilt under the cursor) ----
