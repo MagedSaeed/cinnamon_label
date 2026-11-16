@@ -15,6 +15,7 @@
     noDrafts: true, // pause Label Studio's draft auto-save (the server refuses it); we keep a local backup
     devReload: false,
     // presegmentation (the user's diarization server; same rules as the old SpeakerCut)
+    closeUp: false, // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
     nudgeMs: 50, // the -/+ buttons beside a segment's start and end
     nudgeShiftMs: 250, // the same buttons with Shift held
     psServer: "http://127.0.0.1:8000",

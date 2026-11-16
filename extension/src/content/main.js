@@ -531,6 +531,7 @@
       nudgeShiftMs: () => (settings && settings.nudgeShiftMs) || 250,
     });
     panel.setUi(ui);
+    ui.setCloseUp(!!settings.closeUp);
     ui.onNative(() => setMode("native"));
     ui.onBack(() => setMode("cinnamon"));
 
@@ -562,6 +563,7 @@
           settings = await CL.settings();
           CL.setActive(settings.enabled);
           CL.setNoDrafts(settings.enabled && settings.noDrafts);
+          if (ui) ui.setCloseUp(!!settings.closeUp);
           if (!settings.enabled) {
             CL.setMode("native");
             shutdown();

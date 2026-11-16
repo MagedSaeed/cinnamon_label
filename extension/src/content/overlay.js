@@ -76,9 +76,8 @@ video:not([data-ready]){visibility:hidden}
 .lanes{padding:4px 14px 12px}
 .lanes canvas{display:block; width:100%}
 .lane{position:relative}
-.lanelab{position:absolute; right:6px; top:3px; padding:1px 7px; border-radius:999px; background:rgba(255,255,255,.88);
-  border:1px solid var(--line); color:var(--muted); font-size:11px; pointer-events:none; font-variant-numeric:tabular-nums}
-.lane:has(.dt) .lanelab{top:24px}
+.lane[hidden]{display:none}
+.single .dt{height:170px}
 .ov{height:40px; cursor:pointer; border-radius:4px}
 .dt{height:150px; border:1px solid var(--line); border-radius:6px}
 .zoom{display:flex; align-items:center; gap:2px; color:var(--muted); font-variant-numeric:tabular-nums}
@@ -136,7 +135,7 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
           <span class="clock"><b id="cur">0:00.0</b> / <span id="dur">–</span></span>
           <div class="segbar" id="segbar" role="toolbar" aria-label="Segment tools"></div>
           <div class="zone">
-          <div class="zoom" title="Detail lane width. Ctrl + mouse wheel on the lane also zooms; the wheel scrolls.">
+          <div class="zoom" id="zoomBox" title="Close-up width. Ctrl + mouse wheel on the lane also zooms; the wheel scrolls.">
             <button id="zoomOut" aria-label="Show more time">−</button><input id="zoomTxt" value="15 s" spellcheck="false" autocomplete="off" inputmode="decimal" aria-label="Seconds shown in the detail lane" title="Type a width, e.g. 8 or 1:30, then press Enter"><button id="zoomIn" aria-label="Show less time">+</button>
           </div>
           <label class="speed">Speed
@@ -149,8 +148,8 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         </footer>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <section class="lanes">
-          <div class="lane"><canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas><span class="lanelab">Whole video</span></div>
-          <div class="lane"><canvas class="dt" id="dt" aria-label="Close-up. Click to jump, drag to make a segment."></canvas><span class="lanelab" id="dtLab">Close-up</span></div>
+          <div class="lane" id="ovLane"><canvas class="ov" id="ov" aria-label="Whole video. Click to jump."></canvas></div>
+          <div class="lane"><canvas class="dt" id="dt" aria-label="Waveform. Click to jump, drag to make a segment."></canvas></div>
         </section>
       </div>`);
     root.appendChild(app);
@@ -339,8 +338,6 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
             if (root.activeElement === box) return; // don't overwrite while the user is typing
             const label = spanLabel(tl.span);
             if (box.value !== label) box.value = label;
-            const lab = `Close-up · ${label}`;
-            if ($("dtLab").textContent !== lab) $("dtLab").textContent = lab;
           },
         });
         // The width is editable: click, type 8 / 8.5 / 1:30, Enter applies, Esc cancels.
@@ -371,6 +368,14 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         CL.on($("zoomIn"), "click", () => timeline.zoomBy(1 / 1.5));
         CL.on($("zoomOut"), "click", () => timeline.zoomBy(1.5));
         api.timeline = timeline;
+        // One waveform of the whole video (default), or the whole-video strip plus a close-up lane.
+        api.setCloseUp = (on) => {
+          $("ovLane").hidden = !on;
+          $("zoomBox").hidden = !on;
+          root.querySelector(".lanes").classList.toggle("single", !on);
+          timeline.setSingle(!on);
+        };
+        api.setCloseUp(false);
         return timeline;
       },
       destroy() {

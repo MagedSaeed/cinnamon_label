@@ -71,6 +71,10 @@
       <div class="col">
         <section>
           <h2>Editing</h2>
+          <label class="switch" for="closeUp">
+            <span><b>Close-up waveform<button type="button" class="tip" aria-label="About Close-up waveform" data-tip="Adds a second, magnified waveform under the whole-video one. It follows the playhead and shows about 15 seconds at a time, so the pauses between words are visible and segment edges can be placed precisely by dragging. Off: one waveform of the whole video; use the − / + buttons or type a time for fine adjustments.">i</button></b><small>A magnified lane that follows the playhead</small></span>
+            <input type="checkbox" id="closeUp"><i></i>
+          </label>
           <label class="num inline" for="nudgeMs"><span>Nudge step<button type="button" class="tip" aria-label="About Nudge step" data-tip="How far one click on the small − / + buttons beside a segment's start and end moves it.">i</button></span><span class="unit"><input type="number" min="1" max="2000" step="5" id="nudgeMs"><em>ms</em></span></label>
           <label class="num inline" for="nudgeShiftMs"><span>Shift-click step<button type="button" class="tip" aria-label="About Shift-click step" data-tip="How far the same − / + buttons move the edge when you hold Shift while clicking: for bigger corrections.">i</button></span><span class="unit"><input type="number" min="1" max="5000" step="10" id="nudgeShiftMs"><em>ms</em></span></label>
         </section>

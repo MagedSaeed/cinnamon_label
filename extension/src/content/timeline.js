@@ -121,7 +121,7 @@
       this.dt.addEventListener(
         "wheel",
         CL.guard((e) => {
-          if (!this.duration) return;
+          if (!this.duration || this.single) return;
           e.preventDefault();
           if (e.ctrlKey || e.metaKey) this.zoomBy(Math.exp(e.deltaY * 0.0025), this._xToTime(e));
           else {
@@ -271,7 +271,7 @@
     }
     // Make sure segment g is visible in the detail lane.
     revealSegment(g) {
-      if (!g) return;
+      if (!g || this.single) return;
       if (g.end - g.start > this.span * 0.9) this.span = Math.min(this.duration, (g.end - g.start) / 0.8);
       if (g.start < this.viewStart || g.end > this.viewStart + this.span) this.viewStart = g.start - (this.span - (g.end - g.start)) / 2;
       this.follow = false;
@@ -294,8 +294,19 @@
     }
 
     // ---------- view ----------
+    // Single lane (the default): the editing lane shows the whole video; no overview, no zoom.
+    setSingle(on) {
+      this.single = !!on;
+      this.invalidate();
+    }
+
     _clampView() {
       const d = this.duration;
+      if (this.single && d) {
+        this.span = d;
+        this.viewStart = 0;
+        return;
+      }
       this.span = Math.max(MIN_SPAN, Math.min(this.span, d || DEFAULT_SPAN));
       this.viewStart = Math.max(0, Math.min(this.viewStart, Math.max(0, d - this.span)));
     }
@@ -304,6 +315,7 @@
       this._clampView();
     }
     zoomBy(factor, around) {
+      if (this.single) return;
       const d = this.duration;
       if (!d) return;
       const t = around != null ? around : this.v.currentTime || 0;
@@ -319,6 +331,7 @@
       this.zoomBy(seconds / this.span);
     }
     pan(seconds) {
+      if (this.single) return;
       this.viewStart += seconds;
       this.follow = false;
       this._clampView();
@@ -416,8 +429,8 @@
       // Normalise loudness so quiet recordings are still readable.
       const gain = this.audio ? Math.min(4, 0.9 / Math.max(0.05, this._peak())) : 1;
 
-      // ---- overview ----
-      {
+      // ---- overview (only with the close-up lane on) ----
+      if (!this.single) {
         const { w, h, dpr } = fitCanvas(this.ov);
         const ctx = this.ov.getContext("2d");
         ctx.fillStyle = C.bg;
