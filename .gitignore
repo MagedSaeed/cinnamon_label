@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Cinnamon Label: dev auto-reload marker (written on each change during development)
+extension/build-id.txt
