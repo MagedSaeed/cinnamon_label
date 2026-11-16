@@ -206,6 +206,7 @@
   function applyPlan(plan) {
     const a = ann();
     const tags = guardWritable(a);
+    keepDraftsPaused();
     const h = a.history;
     const key = "cinnamon-label";
     const created = [];
@@ -322,12 +323,11 @@
       return false;
     }
   };
-  const pausedAnns = new WeakSet();
+  // Re-applied on every check: Label Studio turns auto-save back on during its own loading.
   function keepDraftsPaused() {
     const a = ann();
-    if (!a || !noDrafts() || pausedAnns.has(a) || typeof a.pauseAutosave !== "function") return;
+    if (!a || !noDrafts() || typeof a.pauseAutosave !== "function") return;
     a.pauseAutosave();
-    pausedAnns.add(a);
   }
 
   // Watch (never change) Label Studio's own requests, to know when the user's Submit, Update or Skip
@@ -362,6 +362,7 @@
     guardWritable(a);
     if (!window.Htx.task || window.Htx.task.id !== taskId) throw new Error("A different task is open now.");
     if (a.serializeAnnotation().length) throw new Error("This annotation already has work in it; nothing was restored.");
+    keepDraftsPaused();
     const h = a.history;
     if (h && h.freeze) h.freeze("cinnamon-label-restore");
     try {

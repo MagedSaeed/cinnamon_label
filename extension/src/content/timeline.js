@@ -9,8 +9,7 @@
 
   const C = {
     bg: "#ffffff",
-    wave: "#c8cdd5", // between segments: light, recedes
-    waveSeg: "#858d9b", // inside a segment: darker
+    wave: "#8b93a1", // the waveform, everywhere except the segment being edited
     played: "#3d4452",
     center: "#d9dde3",
     accent: "#8a4b2a",
@@ -19,8 +18,8 @@
     tick: "#d9dde3",
     hover: "rgba(29,33,41,0.35)",
     text: "#5d6573",
-    segFill: "rgba(61,68,82,0.13)",
-    segSelFill: "rgba(138,75,42,0.13)",
+    segFill: "rgba(61,68,82,0.11)",
+    segSelFill: "rgba(138,75,42,0.12)",
     segNewFill: "rgba(138,75,42,0.18)",
     segEdge: "#7d8594",
     segTag: "#7d8594",
@@ -376,18 +375,15 @@
       return lo === Infinity ? null : [lo, hi];
     }
 
-    // sel: [x0, x1] pixel range of the selected segment: its waveform takes the segment's colour
-    // (deep cinnamon where played, light cinnamon ahead), so progress inside it is easy to see.
+    // Visual language (one meaning per channel):
+    //   where segments are -> gray block behind the waveform with solid edges (gaps are white);
+    //   the segment being edited -> the same block in cinnamon;
+    //   where you are -> the playhead line;
+    //   progress inside the segment being edited -> its waveform, deep cinnamon played / light ahead.
+    // The waveform is otherwise one calm gray. sel: [x0, x1] pixels of the selected segment.
     _wave(ctx, x0, w, top, h, t0, span, playX, gain, sel) {
       const mid = top + h / 2;
       const amp = (h / 2) * gain;
-      // Which pixels lie inside a segment: segments are darker, the gaps between them recede.
-      const mask = new Uint8Array(w);
-      for (const g of this.segs) {
-        const a = Math.max(0, Math.floor(((g.start - t0) / span) * w));
-        const b = Math.min(w, Math.ceil(((g.end - t0) / span) * w));
-        for (let i = a; i < b; i++) mask[i] = 1;
-      }
       ctx.fillStyle = C.center;
       ctx.fillRect(x0, Math.round(mid), w, 1);
       for (let x = 0; x < w; x++) {
@@ -397,8 +393,8 @@
         const y1 = mid - Math.max(-1, r[0]) * amp;
         const px = x0 + x;
         const inSel = sel && px >= sel[0] && px < sel[1];
-        const inSeg = !inSel && mask[x] === 1;
-        ctx.fillStyle = px < playX ? (inSel ? C.playedSel : C.played) : inSel ? C.waveSel : inSeg ? C.waveSeg : C.wave;
+        // One gray everywhere; only the segment being edited shows progress (played / ahead).
+        ctx.fillStyle = inSel ? (px < playX ? C.playedSel : C.waveSel) : C.wave;
         ctx.fillRect(px, y0, 1, Math.max(1, y1 - y0));
       }
     }
