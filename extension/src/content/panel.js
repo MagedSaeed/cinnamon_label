@@ -191,7 +191,7 @@
           <button class="btn" id="oldX">Got it</button>
         </div>
         <div class="ph"><h2>Segments <span class="count" id="segCount"></span></h2><span class="sum" id="segSum"></span>
-          <button class="btn" id="aPre" title="Suggest segments by speaker (nothing is added until you accept)">${I.spark}Presegment</button></div>
+          <button class="btn" id="aPre" title="Suggest segments by speaker (nothing is added until you accept)">${I.spark}<span>Presegment</span></button></div>
         <div class="sugbar" id="sugBar" role="status" hidden>
           <span id="sugTxt"></span>
           <button class="btn primary" id="sugAll">Add all</button>
@@ -785,6 +785,7 @@
         $("aPre").hidden = !presegment || !ps.enabled;
         $("aPre").disabled = presegBusy || !canEdit || ps.online === false;
         $("aPre").classList.toggle("running", presegBusy); // the sparkle turns while it works
+        $("aPre").querySelector("span").textContent = presegBusy ? "Presegmenting…" : "Presegment";
         $("aPre").title =
           ps.online === false
             ? "The presegmentation server isn't running (see the extension's Presegmentation tab)."
