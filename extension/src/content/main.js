@@ -635,7 +635,6 @@
     CL.openDownload = () => (task && task.dl && !task.blob && !task.dl.aborted ? { taskId: task.taskId, loaded: task.dl.loaded, total: task.dl.total } : null);
     CL.taskList.start();
     ui.setCloseUp(!!settings.closeUp);
-    CL.allowMove = !!settings.moveSegments;
     ui.onNative(() => setMode("native"));
     ui.onBack(() => setMode("cinnamon"));
 
@@ -689,8 +688,7 @@
           CL.setActive(settings.enabled);
           CL.setNoDrafts(settings.enabled && settings.noDrafts);
           if (ui) ui.setCloseUp(!!settings.closeUp);
-          CL.allowMove = !!settings.moveSegments;
-          if (!settings.enabled) {
+                if (!settings.enabled) {
             CL.setMode("native");
             shutdown();
           }

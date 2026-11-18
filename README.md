@@ -28,6 +28,7 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
     - **Draw segment:** press it, then drag across an empty part of the waveform (Esc or ✕ to stop).
   - If the playhead is inside a segment, a yellow note above the button says so.
   - Drag a segment's edge to move it. Segments are always separate: only that segment changes, and an edge stops at its neighbour's edge instead of pushing it. Shift turns snapping off.
+  - Hold **Ctrl** (⌘ on a Mac) and drag a segment's middle to slide the whole segment left or right, keeping its length. Without the key a click only selects, so a segment never shifts by accident.
   - Fine-tune start and end with the − / + buttons or by typing a time.
   - **Split at playhead**, **Merge with next**, **Delete**, **Undo** and **Redo** are in the toolbar.
   - Segments never overlap. **Split at playhead** leaves a small gap (100 ms by default, set in the popup) and the new part starts with empty answers; merging keeps the first segment's answers and joins the transcripts.
@@ -46,6 +47,7 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
 | Space | Play / pause |
 | ← / → | Back / forward 5 seconds |
 | Esc | Cancel **Mark segment** / **Draw segment**, or unselect the segment |
+| Ctrl (⌘) + drag | Move a whole segment |
 
 Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left to the browser and Label Studio.
 
@@ -56,7 +58,7 @@ Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left t
   - stop Label Studio's draft auto-save;
   - parallel connections (1–4);
   - download the next 1 or 2 tasks ahead;
-  - editing options: the close-up waveform, moving whole segments by dragging their middle, the nudge steps for the − / + buttons, and the split gap;
+  - editing options: the close-up waveform, the nudge steps for the − / + buttons, and the split gap;
   - reload on code changes (for development only).
 - **Saved videos:** see what is saved and how much space it uses; delete one or all. The oldest are removed automatically above the size limit.
 - **Presegmentation:**

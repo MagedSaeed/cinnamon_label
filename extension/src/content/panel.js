@@ -348,6 +348,7 @@
     CL.on(root, "pointerdown", (e) => {
       if (!menu.hidden && !e.composedPath().some((n) => n === menu || n === $("aMode"))) showMenu(false);
     });
+    timeline.onMoveHint = () => flash(`To move a segment, hold ${CL.MOVE_KEY} and drag it.`);
     timeline.onCreated = () => {
       if (!drawArmed) return;
       setArmed(false);

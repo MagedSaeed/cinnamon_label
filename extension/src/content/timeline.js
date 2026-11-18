@@ -105,7 +105,7 @@
       CL.on(this.ov, "pointercancel", ovEnd);
 
       // Detail lane: segments.
-      //  drag on empty waveform -> new segment; drag an edge -> resize; drag a segment's middle -> move it;
+      //  drag on empty waveform -> new segment; drag an edge -> resize; Ctrl (⌘) + drag a segment's middle -> move it;
       //  click a segment -> select + seek;
       //  click empty -> seek. Edges snap to the playhead and other edges (Shift: no snapping);
       //  An edge moves only its own segment (it stops at a neighbour's edge, never pushes it).
@@ -117,7 +117,16 @@
         this.preview = null;
         this.invalidate();
       });
+      // Pressing / releasing the move key while hovering a segment: show (or drop) the grab hand.
+      const keyCursor = (e) => {
+        if (e.key !== "Control" && e.key !== "Meta") return;
+        if (this._dead || this.drag || !this._hoverInSeg || this.hoverEdge || !this.editable) return;
+        this.dt.style.cursor = CL.moveKey(e) ? "grab" : "pointer";
+      };
+      CL.on(window, "keydown", keyCursor);
+      CL.on(window, "keyup", keyCursor);
       CL.on(this.dt, "pointerleave", () => {
+        this._hoverInSeg = false;
         if (this.drag) return;
         this.hoverX = null;
         this.hoverEdge = null;
@@ -212,7 +221,7 @@
         const inside = globalThis.CLSeg.segmentAt(base, t);
         // On a suggestion (outside real segments): a click adds it, a drag still creates a segment.
         const sug = !inside && this.editable ? this._sugAt(t) : null;
-        this.drag = inside ? { kind: "select", id: inside.id, x0: x, t0: t, base, seg: inside } : { kind: "create", t0: this._snap(t, e), base, x0: x, sug };
+        this.drag = inside ? { kind: "select", id: inside.id, x0: x, t0: t, base, seg: inside, move: CL.moveKey(e) } : { kind: "create", t0: this._snap(t, e), base, x0: x, sug };
       }
     }
     // The ruler strip along the top of the lane (scrub zone).
@@ -244,9 +253,14 @@
         this.hoverEdge = this.editable ? this._edgeAt(x) : null;
         const t = this._xToTime(e);
         const inSeg = S.segmentAt(this.segs, t);
+        this._hoverInSeg = !!inSeg;
         const sug = !this.hoverEdge && !inSeg && this.editable ? this._sugAt(t) : null;
-        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : sug ? "copy" : !this.editable ? "pointer" : inSeg ? (CL.allowMove ? "grab" : "pointer") : "crosshair";
-        this.dt.title = sug ? `Click to add this suggested segment (${sug.speaker}), or drag to make your own.` : "";
+        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : sug ? "copy" : !this.editable ? "pointer" : inSeg ? (CL.moveKey(e) ? "grab" : "pointer") : "crosshair";
+        this.dt.title = sug
+          ? `Click to add this suggested segment (${sug.speaker}), or drag to make your own.`
+          : inSeg && this.editable && !this.hoverEdge
+            ? `Click to select. ${CL.MOVE_KEY} + drag to move the whole segment.`
+            : "";
         return this.invalidate();
       }
       d.moved = d.moved || Math.abs(x - d.x0) > 3;
@@ -256,7 +270,12 @@
         const t = this._snap(this._xToTime(e), e, d.id);
         d.plan = S.moveEdge(d.base, d.id, d.edge, t, this.duration);
         this.preview = d.plan ? S.apply(d.base, d.plan) : null;
-      } else if (d.kind === "select" && this.editable && CL.allowMove) {
+      } else if (d.kind === "select" && this.editable && !d.move) {
+        // Dragged a segment's middle without the key: it stays put; say how to move it (once per drag).
+        if (!d.hinted && this.onMoveHint) this.onMoveHint();
+        d.hinted = true;
+        return;
+      } else if (d.kind === "select" && this.editable) {
         // Drag the middle of a segment: slide the whole segment, keeping its length. Either edge
         // snaps to the playhead or a neighbour's edge (Shift: no snapping).
         this.dt.style.cursor = "grabbing";

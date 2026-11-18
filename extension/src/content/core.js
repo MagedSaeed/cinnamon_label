@@ -16,8 +16,7 @@
     devReload: false,
     // presegmentation (the user's diarization server; same rules as the old SpeakerCut)
     prefetchNext: 1, // look-ahead: how many next unannotated tasks' videos to download (0 = off)
-    closeUp: false,
-    moveSegments: false, // drag a segment's middle to slide the whole segment (off: only edges move) // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
+    closeUp: false, // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
     nudgeMs: 50, // the -/+ buttons beside a segment's start and end
     nudgeShiftMs: 250, // the same buttons with Shift held
     splitGapMs: 100, // gap left between the two parts of a split, centred on the playhead
@@ -164,6 +163,11 @@
   // Stopping them there also skips listeners on the field itself, so fields register here instead.
   CL.fieldKeys = new WeakMap(); // element -> keydown handler
   CL.onFieldKey = (el, fn) => CL.fieldKeys.set(el, CL.guard(fn));
+  // Moving a whole segment needs a held key, so a click never shifts one by accident.
+  // Ctrl (⌘ on a Mac; Alt is taken by Linux window managers for dragging windows).
+  const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  CL.MOVE_KEY = MAC ? "⌘" : "Ctrl";
+  CL.moveKey = (e) => !!(e && (MAC ? e.metaKey : e.ctrlKey));
   CL.isTypingTarget = (t) => {
     if (!t || !t.tagName) return false;
     if (t.isContentEditable) return true;
