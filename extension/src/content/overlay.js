@@ -270,8 +270,23 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
       // (where Submit is) or the window edge, so our editor always fits on screen.
       const bar = document.querySelector(".lsf-bottombar");
       const barTop = bar ? bar.getBoundingClientRect().top : Infinity;
-      const bottom = Math.min(window.innerHeight, barTop > r.top ? barTop : Infinity, r.bottom);
+      // With the bar, always reach down to it: Label Studio's area grows by a few pixels when a region
+      // is selected, and following that made our whole editor jump on every select / unselect.
+      const bottom = Math.min(window.innerHeight, barTop > r.top && barTop !== Infinity ? barTop : r.bottom);
       const height = Math.max(240, bottom - Math.max(0, r.top));
+      // Its hidden content scrolling would add a scrollbar and narrow our editor by its width:
+      // no scrolling there while ours covers it (the Submit bar is outside this area).
+      const mc = anchor.closest(".lsf-main-content");
+      if (mc) {
+        if (visible && mc.style.overflowY !== "hidden") {
+          mc.dataset.clOverflow = mc.style.overflowY || "";
+          mc.style.overflowY = "hidden";
+          mc.scrollTop = 0;
+        } else if (!visible && mc.dataset.clOverflow != null) {
+          mc.style.overflowY = mc.dataset.clOverflow;
+          delete mc.dataset.clOverflow;
+        }
+      }
       if (visible) Object.assign(host.style, { left: r.left + "px", top: Math.max(0, r.top) + "px", width: r.width + "px", height: height + "px" });
       if (pillVisible) Object.assign(pill.style, { left: r.left + 16 + "px", top: r.bottom - 52 + "px" });
     };
@@ -538,6 +553,8 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         clearInterval(placeTimer);
         ro.disconnect();
         window.removeEventListener("resize", place);
+        visible = false;
+        place(); // give Label Studio's area its scrolling back
         host.remove();
         pillHost.remove();
       },

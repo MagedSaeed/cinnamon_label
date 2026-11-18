@@ -76,6 +76,10 @@
 /* Skipped: full strength (still clickable), marked by faint diagonal stripes and a dashed skip tag. */
 .card.skipped{background:linear-gradient(to bottom, #fff 62%, rgba(255,255,255,0) 92%), repeating-linear-gradient(135deg, #fff 0 9px, #f6f7f9 9px 18px)}
 .card.skipped .ch .sub .tag[data-k="skip"]{border-style:dashed; background:#fff}
+/* Opening a segment: its form eases in rather than popping. */
+@keyframes clOpen{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none}}
+.card.open #detail{animation:clOpen .2s ease-out}
+@media (prefers-reduced-motion: reduce){.card.open #detail{animation:none}}
 .ch .sub .tag[data-d]{font-weight:600}
 .ch .sub .tag[data-d="0"]{--dc:#0f6b5c; --db:#e2f3ef; --dl:#a9d8cc}
 .ch .sub .tag[data-d="1"]{--dc:#2f6b22; --db:#e8f4e3; --dl:#b5d9a8}
@@ -935,7 +939,7 @@
           const c = cards.get(g.id);
           if (c && $("detail").parentElement !== c.body) c.body.appendChild($("detail"));
           if (segView) segView.render(g.id, values(g), { readOnly: !canEdit });
-          if (c && lastOpen !== g.id) c.root.scrollIntoView({ block: "nearest" });
+          if (c && lastOpen !== g.id) c.root.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
           if (focusNext) {
             focusNext = false;
             const tx = segView && segView.firstBigText();
