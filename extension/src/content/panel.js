@@ -56,6 +56,15 @@
 .cplay svg{width:12px; height:12px; fill:currentColor}
 .cplay:hover span{border-color:var(--cinnamon); color:var(--cinnamon)}
 .cplay.on span{background:var(--cinnamon); border-color:var(--cinnamon); color:#fff}
+/* Replay: under the play button, on every card. Faint while the card is collapsed (a click opens
+   it); live once the card is open, with Loop just below it in the form's rail. */
+.crep{position:absolute; z-index:1; top:46px; left:13px; display:grid; place-items:center; width:26px; height:26px; padding:0; border-radius:50%;
+  border:1px solid var(--line); background:var(--panel); color:var(--muted); transition:color .2s, border-color .2s, background-color .2s}
+.crep svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.card.open .crep:hover{border-color:var(--cinnamon); color:var(--cinnamon)}
+.card:not(.open) .crep{border-color:#eceef1; background:#fafbfc; color:#c6cbd2}
+.card:not(.open) .crep:hover{border-color:var(--line); color:var(--muted)}
+.card{min-height:82px}
 .card.open .cplay{background:var(--cinnamon-soft); border-bottom:1px solid #ecdcd2}
 .cplay:hover + .ch{background:var(--surface)}
 .card.open .cplay:hover + .ch{background:var(--cinnamon-soft)}
@@ -565,6 +574,15 @@
       else playSeg(g);
     });
 
+    // Replay under the play button: on a collapsed card it opens the segment; on the open one it replays.
+    CL.on($("cards"), "click", (e) => {
+      const rb = e.target.closest(".crep");
+      if (!rb || !store) return;
+      const id = rb.parentElement.dataset.id;
+      if (store.selected !== id) store.select(id);
+      else play();
+    });
+
     // ---- cards: click a header to open (or close) that segment ----
     CL.on($("cards"), "click", (e) => {
       const head = e.target.closest(".ch");
@@ -820,9 +838,9 @@
       rootEl.className = "card";
       rootEl.dataset.id = id;
       rootEl.setAttribute("role", "listitem");
-      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="lp" hidden title="This segment is looping. Click to stop.">↻ Looping</span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span><canvas class="mini" aria-hidden="true"></canvas></button><div class="cbody"></div>`;
+      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="crep" type="button"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="lp" hidden title="This segment is looping. Click to stop.">↻ Looping</span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span><canvas class="mini" aria-hidden="true"></canvas></button><div class="cbody"></div>`;
       const q = (s) => rootEl.querySelector(s);
-      c = { root: rootEl, play: q(".cplay"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), lp: q(".lp"), sub: q(".sub"), pv: q(".pv"), mini: q(".mini"), body: q(".cbody") };
+      c = { root: rootEl, play: q(".cplay"), rep: q(".crep"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), lp: q(".lp"), sub: q(".sub"), pv: q(".pv"), mini: q(".mini"), body: q(".cbody") };
       // "Looping" badge: stops the loop, without opening or closing the card.
       c.lp.addEventListener("click", (e) => {
         e.preventDefault();
@@ -868,7 +886,7 @@
           ? new CL.FormView($("form"), {
               items: f.segment,
               onChange: (name, v, o) => store && store.selected && store.setField(store.selected, name, v, o),
-              extras: { onReplay: play, loop: { get: loopOn, set: setLoop }, onNext: goNext, onBlur: () => store && store.flushTexts() },
+              extras: { loop: { get: loopOn, set: setLoop }, onNext: goNext, onBlur: () => store && store.flushTexts() },
             })
           : null;
         api.render();
@@ -1018,6 +1036,11 @@
           const open = !!g && g.id === x.id;
           c.root.classList.toggle("open", open);
           c.head.setAttribute("aria-expanded", String(open));
+          const rt = open ? "Replay segment (repeats if Loop, below, is on)" : "Replay: open this segment to replay or loop it";
+          if (c.rep.title !== rt) {
+            c.rep.title = rt;
+            c.rep.setAttribute("aria-label", rt);
+          }
         });
         for (const [id, c] of cards) {
           if (live.has(id)) continue;

@@ -62,10 +62,10 @@
 .withnext > .chips{flex:1 1 auto; min-width:0}
 .nextbtn{margin-left:auto; flex:none}
 .tbar:empty{display:none}
-/* Replay / Loop: round buttons in a rail under the card's play button, in the same column */
+/* Loop: a round button in a rail under the card's play and Replay buttons, in the same column */
 .hasrail{display:grid; grid-template-columns:34px minmax(0,1fr); column-gap:14px}
 .hasrail > :not(.rail){grid-column:2}
-.rail{grid-column:1; grid-row:1 / span 9; align-self:stretch; margin:-12px 0 -14px -14px; padding:10px 4px 0 8px; display:flex; flex-direction:column;
+.rail{grid-column:1; grid-row:1 / span 9; align-self:stretch; margin:-12px 0 -14px -14px; padding:6px 4px 0 8px; display:flex; flex-direction:column;
   align-items:center; gap:8px; border-right:1px solid #e9ecf0}
 .rb{display:grid; place-items:center; width:26px; height:26px; padding:0; border-radius:50%; border:1px solid var(--line); background:var(--panel); color:var(--muted); flex:none}
 .rb svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
@@ -85,7 +85,7 @@
   };
 
   CL.FormView = class FormView {
-    // items: from CLConfig.buildForm; onChange(name, value, { text }); extras: { onReplay, onNext, onBlur }
+    // items: from CLConfig.buildForm; onChange(name, value, { text }); extras: { loop, onNext, onBlur }
     constructor(container, { items, onChange, extras = {} }) {
       this.el = container;
       this.items = items;
@@ -144,7 +144,7 @@
         else n.root.style.removeProperty("--d");
         grp.appendChild(n.root);
       });
-      // Replay / Loop sit in a rail right under the card's play button (same column), whether or
+      // Loop sits in a rail under the card's play and Replay buttons (same column), whether or
       // not the transcript is showing yet (so you can listen before choosing gender and dialect).
       const tc = this.nodes.find((n) => n.rctl);
       this.el.classList.toggle("hasrail", !!tc);
@@ -291,17 +291,8 @@
         root.append(input);
         const bar = el("div", "tbar"); // holds Next segment when nothing follows the transcript
         root.append(bar);
-        const rctl = el("span"); // Replay + Loop; _build moves them to the rail under the play button
-        if (this.extras.onReplay) {
-          const replay = el("button", "rb");
-          replay.type = "button";
-          replay.title = "Replay segment";
-          replay.setAttribute("aria-label", "Replay segment");
-          replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>`;
-          CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
-          rctl.append(replay);
-        }
-        if (this.extras.onReplay && this.extras.loop) {
+        const rctl = el("span"); // Loop; _build moves it to the rail under the card's Replay button
+        if (this.extras.loop) {
           // Loop: on, Replay keeps repeating the segment until paused; off, it plays once.
           const lp = this.extras.loop;
           const sw = el("button", "rb");
