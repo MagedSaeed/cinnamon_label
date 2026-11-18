@@ -62,9 +62,15 @@
 .withnext > .chips{flex:1 1 auto; min-width:0}
 .nextbtn{margin-left:auto; flex:none}
 .tbar:empty{display:none}
-/* Replay / Loop, at the top of the form */
-.topbar{margin:0 0 8px}
-.tbar .loop{display:flex; align-items:center; gap:6px; margin-right:auto; padding-left:4px; font-size:13px; color:var(--ink); cursor:pointer}
+/* Replay / Loop: round buttons in a rail under the card's play button, in the same column */
+.hasrail{display:grid; grid-template-columns:34px minmax(0,1fr); column-gap:14px}
+.hasrail > :not(.rail){grid-column:2}
+.rail{grid-column:1; grid-row:1 / span 9; align-self:stretch; margin:-12px 0 -14px -14px; padding:10px 4px 0 8px; display:flex; flex-direction:column;
+  align-items:center; gap:8px; border-right:1px solid #e9ecf0}
+.rb{display:grid; place-items:center; width:26px; height:26px; padding:0; border-radius:50%; border:1px solid var(--line); background:var(--panel); color:var(--muted); flex:none}
+.rb svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.rb:hover{border-color:var(--cinnamon); color:var(--cinnamon)}
+.rb[aria-pressed="true"]{background:var(--cinnamon); border-color:var(--cinnamon); color:#fff}
 .unsup{color:var(--muted); font-size:12.5px; padding-top:5px}
 @media (prefers-reduced-motion:reduce){.sw, .sw::after{transition:none}}
 `;
@@ -138,13 +144,14 @@
         else n.root.style.removeProperty("--d");
         grp.appendChild(n.root);
       });
-      // Replay / Loop sit at the top of the form, right under the segment's header, whether or
+      // Replay / Loop sit in a rail right under the card's play button (same column), whether or
       // not the transcript is showing yet (so you can listen before choosing gender and dialect).
       const tc = this.nodes.find((n) => n.rctl);
+      this.el.classList.toggle("hasrail", !!tc);
       if (tc) {
-        const top = el("div", "tbar topbar");
-        top.append(...tc.rctl.childNodes);
-        this.el.prepend(top);
+        const rail = el("div", "rail");
+        rail.append(...tc.rctl.childNodes);
+        this.el.prepend(rail);
       }
       this.nodes.push({ root: wrap, update: () => groups.forEach((g) => (g.hidden = [...g.children].every((c) => c.hidden))) });
       // "Next segment" sits at the right of the last visible question, so it comes after every
@@ -284,28 +291,34 @@
         root.append(input);
         const bar = el("div", "tbar"); // holds Next segment when nothing follows the transcript
         root.append(bar);
-        const rctl = el("span"); // Replay + Loop; _build moves them to the top of the form
-        const replay = el("button", "btn");
-        replay.type = "button";
-        replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>Replay segment`;
-        CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
-        if (this.extras.onReplay) rctl.append(replay);
+        const rctl = el("span"); // Replay + Loop; _build moves them to the rail under the play button
+        if (this.extras.onReplay) {
+          const replay = el("button", "rb");
+          replay.type = "button";
+          replay.title = "Replay segment";
+          replay.setAttribute("aria-label", "Replay segment");
+          replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>`;
+          CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
+          rctl.append(replay);
+        }
         if (this.extras.onReplay && this.extras.loop) {
-          // Loop switch: on, Replay keeps repeating the segment until paused; off, it plays once.
+          // Loop: on, Replay keeps repeating the segment until paused; off, it plays once.
           const lp = this.extras.loop;
-          const wrap = el("label", "loop");
-          const sw = el("button", "sw");
+          const sw = el("button", "rb");
           sw.type = "button";
-          sw.setAttribute("role", "switch");
-          sw.setAttribute("aria-checked", String(!!lp.get()));
-          sw.title = "On: Replay segment repeats until you pause. Off: it plays once.";
+          sw.setAttribute("aria-label", "Loop");
+          const paint = (on) => {
+            sw.setAttribute("aria-pressed", String(on));
+            sw.title = on ? "Loop is on: Replay repeats the segment until you pause. Click to turn off." : "Loop is off: Replay plays the segment once. Click to loop it.";
+          };
+          paint(!!lp.get());
+          sw.innerHTML = `<svg viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>`;
           CL.on(sw, "click", () => {
-            const on = sw.getAttribute("aria-checked") !== "true";
-            sw.setAttribute("aria-checked", String(on));
+            const on = sw.getAttribute("aria-pressed") !== "true";
+            paint(on);
             lp.set(on);
           });
-          wrap.append(sw, el("span", null, "Loop"));
-          rctl.append(wrap);
+          rctl.append(sw);
         }
         return {
           root,
