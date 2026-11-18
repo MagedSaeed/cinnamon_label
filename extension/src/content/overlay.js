@@ -74,6 +74,12 @@ video:not([data-ready]){visibility:hidden}
 .transport{display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding:8px 14px; border-top:1px solid var(--line)}
 .transport .zone{display:flex; align-items:center; gap:12px; flex:none}
 .transport .segbar{flex:1}
+/* One control height across the bar (buttons, time fields, chips, speed, zoom). */
+.transport .btn, .transport .icon, .transport .nudge, .transport .tf, .transport .segbar .who,
+.transport .speed select, .transport .speed input, .transport .zoom button, .transport .zoom input{height:30px; box-sizing:border-box}
+.transport .btn, .transport .tf, .transport .speed select, .transport .speed input, .transport .zoom input{padding-top:0; padding-bottom:0}
+.transport .segbar .who{padding:0 5px 0 10px}
+.transport .zoom button{width:28px}
 .lanes .ov{margin-bottom:8px}
 .play{width:36px; height:36px; border-radius:50%; border:none; background:var(--cinnamon); color:#fff; display:grid; place-items:center; flex:none}
 .play svg{width:18px; height:18px; fill:currentColor}
