@@ -921,6 +921,13 @@
         }
 
         drawMinis();
+        // The replayed segment was open and has just been closed (or another opened): end its
+        // replay/loop and let the video play on. Next segment starts its own replay right after.
+        if (rangeSeg && lastOpen === rangeSeg && (!g || g.id !== rangeSeg)) {
+          rangeSeg = null;
+          player._range = null;
+          player.setLoop(false);
+        }
         syncRange();
 
         // the open card holds the form
