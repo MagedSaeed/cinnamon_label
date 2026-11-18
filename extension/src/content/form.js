@@ -62,7 +62,8 @@
 .withnext > .chips{flex:1 1 auto; min-width:0}
 .nextbtn{margin-left:auto; flex:none}
 .tbar:empty{display:none}
-/* Loop: a round button in a rail under the card's play and Replay buttons, in the same column */
+/* Loop: a round button in a rail under the card's play button, in the same column */
+.tbar .loop{display:flex; align-items:center; gap:6px; margin-right:auto; padding-left:4px; font-size:13px; color:var(--ink); cursor:pointer}
 .hasrail{display:grid; grid-template-columns:34px minmax(0,1fr); column-gap:14px}
 .hasrail > :not(.rail){grid-column:2}
 .rail{grid-column:1; grid-row:1 / span 9; align-self:stretch; margin:-12px 0 -14px -14px; padding:6px 4px 0 8px; display:flex; flex-direction:column;
@@ -85,7 +86,7 @@
   };
 
   CL.FormView = class FormView {
-    // items: from CLConfig.buildForm; onChange(name, value, { text }); extras: { loop, onNext, onBlur }
+    // items: from CLConfig.buildForm; onChange(name, value, { text }); extras: { onReplay, loop, onNext, onBlur }
     constructor(container, { items, onChange, extras = {} }) {
       this.el = container;
       this.items = items;
@@ -144,7 +145,7 @@
         else n.root.style.removeProperty("--d");
         grp.appendChild(n.root);
       });
-      // Loop sits in a rail under the card's play and Replay buttons (same column), whether or
+      // Loop sits in a rail under the card's play button (same column), whether or
       // not the transcript is showing yet (so you can listen before choosing gender and dialect).
       const tc = this.nodes.find((n) => n.rctl);
       this.el.classList.toggle("hasrail", !!tc);
@@ -291,25 +292,44 @@
         root.append(input);
         const bar = el("div", "tbar"); // holds Next segment when nothing follows the transcript
         root.append(bar);
-        const rctl = el("span"); // Loop; _build moves it to the rail under the card's Replay button
+        const rctl = el("span"); // Loop; _build moves it to the rail under the card's play button
+        // The same Replay and Loop also sit under the text, within reach while transcribing.
+        if (this.extras.onReplay) {
+          const replay = el("button", "btn");
+          replay.type = "button";
+          replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>Replay segment`;
+          CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
+          bar.append(replay);
+        }
         if (this.extras.loop) {
           // Loop: on, Replay keeps repeating the segment until paused; off, it plays once.
+          // Two controls (rail button, switch under the text) for one setting, painted together.
           const lp = this.extras.loop;
-          const sw = el("button", "rb");
+          const rb = el("button", "rb");
+          rb.type = "button";
+          rb.setAttribute("aria-label", "Loop");
+          rb.innerHTML = `<svg viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>`;
+          const wrap = el("label", "loop");
+          const sw = el("button", "sw");
           sw.type = "button";
-          sw.setAttribute("aria-label", "Loop");
+          sw.setAttribute("role", "switch");
+          sw.title = "On: Replay segment repeats until you pause. Off: it plays once.";
+          wrap.append(sw, el("span", null, "Loop"));
           const paint = (on) => {
-            sw.setAttribute("aria-pressed", String(on));
-            sw.title = on ? "Loop is on: Replay repeats the segment until you pause. Click to turn off." : "Loop is off: Replay plays the segment once. Click to loop it.";
+            rb.setAttribute("aria-pressed", String(on));
+            rb.title = on ? "Loop is on: play and Replay repeat the segment until you pause. Click to turn off." : "Loop is off: the segment plays once. Click to loop it.";
+            sw.setAttribute("aria-checked", String(on));
           };
           paint(!!lp.get());
-          sw.innerHTML = `<svg viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>`;
-          CL.on(sw, "click", () => {
-            const on = sw.getAttribute("aria-pressed") !== "true";
+          const flip = () => {
+            const on = rb.getAttribute("aria-pressed") !== "true";
             paint(on);
             lp.set(on);
-          });
-          rctl.append(sw);
+          };
+          CL.on(rb, "click", flip);
+          CL.on(sw, "click", flip);
+          rctl.append(rb);
+          bar.append(wrap);
         }
         return {
           root,
