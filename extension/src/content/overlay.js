@@ -79,12 +79,12 @@ video:not([data-ready]){visibility:hidden}
 .play svg{width:18px; height:18px; fill:currentColor}
 .play:disabled{opacity:.4; cursor:default}
 .pgroup{display:inline-flex; align-items:center; gap:6px; flex:none}
-.nudge{width:24px; height:24px; border-radius:50%; border:none; background:rgba(138,75,42,.12); color:var(--cinnamon); display:grid; place-items:center; flex:none; cursor:pointer; transition:background .15s,color .15s}
-.nudge svg{width:12px; height:12px; fill:currentColor}
-.nudge:hover:not(:disabled){background:var(--cinnamon); color:#fff}
-.nudge:active:not(:disabled){transform:scale(.92)}
-.nudge:focus-visible{outline:2px solid var(--cinnamon); outline-offset:2px}
-.nudge:disabled{opacity:.4; cursor:default}
+.stepb{width:20px; height:20px; border-radius:50%; border:1px solid rgba(138,75,42,.38); background:#fffaf6; color:#b07a5c; display:grid; place-items:center; flex:none; padding:0; cursor:pointer; transition:background .15s,border-color .15s,color .15s}
+.stepb svg{width:9px; height:9px; fill:currentColor}
+.stepb:hover:not(:disabled){background:rgba(138,75,42,.12); border-color:var(--cinnamon); color:var(--cinnamon)}
+.stepb:active:not(:disabled){transform:scale(.92)}
+.stepb:focus-visible{outline:2px solid var(--cinnamon); outline-offset:2px}
+.stepb:disabled{opacity:.4; cursor:default}
 .clock{font-variant-numeric:tabular-nums; color:var(--muted); white-space:nowrap}
 .clock b{color:var(--ink); font-weight:600}
 /* Timeline lanes (drawn by timeline.js) */
@@ -171,9 +171,9 @@ button:focus-visible{outline:2px solid #8a4b2a; outline-offset:2px}
         <footer class="transport">
           <p class="streamnote" id="streamNote" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>The video is still downloading, so playback may pause to buffer. It plays smoothly once the download finishes.</p>
           <span class="pgroup">
-          <button class="nudge" id="skBack" aria-label="Back 2 seconds" title="Back 2 seconds" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 3.2v9.6L1.5 8zM14.5 3.2v9.6L8.5 8z"/></svg></button>
+          <button class="stepb" id="skBack" aria-label="Back 2 seconds" title="Back 2 seconds" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 3.2v9.6L1.5 8zM14.5 3.2v9.6L8.5 8z"/></svg></button>
           <button class="play" id="play" aria-label="Play" disabled>${ICON_PLAY}</button>
-          <button class="nudge" id="skFwd" aria-label="Forward 2 seconds" title="Forward 2 seconds" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.2v9.6L7.5 8zM8.5 3.2v9.6L14.5 8z"/></svg></button>
+          <button class="stepb" id="skFwd" aria-label="Forward 2 seconds" title="Forward 2 seconds" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.2v9.6L7.5 8zM8.5 3.2v9.6L14.5 8z"/></svg></button>
           </span>
           <span class="clock"><b id="cur">0:00.0</b> / <span id="dur">–</span></span>
           <div class="segbar" id="segbar" role="toolbar" aria-label="Segment tools"></div>
