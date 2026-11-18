@@ -22,7 +22,11 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
 - A task opens in Label Studio's own interface. Click **Use Cinnamon Label** (bottom of the editor) to switch. Your choice is remembered; **Switch to native UI** in the header goes back. Put the button away with ✕ if you work in the native interface; the small logo in the corner brings it back.
 - **Video:** the video streams while it downloads and is saved in the browser, so it opens instantly next time. The bar along the waveform shows what has downloaded; playing beyond it may pause briefly.
 - **Segments:**
-  - Drag on an empty part of the waveform to create a segment, or use **Add segment**, then **Mark end** while playing.
+  - Drag on an empty part of the waveform to create a segment (works in either mode).
+  - The button beside the play controls adds segments in one of two modes, chosen with its ▾ menu (remembered):
+    - **Mark segment:** press it where the speech starts, then **Mark end** where it ends, while playing.
+    - **Draw segment:** press it, then drag across an empty part of the waveform (Esc or ✕ to stop).
+  - If the playhead is inside a segment, a yellow note above the button says so.
   - Drag a segment's edge to move it. Segments are always separate: only that segment changes, and an edge stops at its neighbour's edge instead of pushing it. Shift turns snapping off.
   - Fine-tune start and end with the − / + buttons or by typing a time.
   - **Split at playhead**, **Merge with next**, **Delete**, **Undo** and **Redo** are in the toolbar.
@@ -41,7 +45,7 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
 | --- | --- |
 | Space | Play / pause |
 | ← / → | Back / forward 5 seconds |
-| Esc | Cancel **Add segment**, or unselect the segment |
+| Esc | Cancel **Mark segment** / **Draw segment**, or unselect the segment |
 
 Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left to the browser and Label Studio.
 

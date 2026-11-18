@@ -293,7 +293,8 @@
         } else if (store) store.select(null);
         this.player.seekTo(t);
       } else if (d.plan && store) {
-        store.apply(d.plan, { select: d.kind === "create" ? "created" : d.id });
+        const done = store.apply(d.plan, { select: d.kind === "create" ? "created" : d.id });
+        if (d.kind === "create" && this.onCreated) Promise.resolve(done).then(() => this.onCreated(), () => {});
       } else if (d.kind === "select" && store) {
         store.select(d.id); // dragged but could not move (no room): still select it
       }

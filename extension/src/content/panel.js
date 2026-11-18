@@ -118,6 +118,33 @@
 .btn.danger:hover:not(:disabled){border-color:#e8b4ae}
 .btn.marking{background:#fff; border-color:var(--cinnamon); color:var(--cinnamon)}
 .btn.marking::before{content:""; width:8px; height:8px; border-radius:50%; background:var(--err); animation:pulse 1s ease-in-out infinite alternate}
+.btn.arming{background:#fff; border-color:var(--cinnamon); color:var(--cinnamon)}
+/* Add segment + its mode menu (opens upwards: the bar is at the bottom) */
+.addgrp{position:relative; display:inline-flex; flex:none}
+.addgrp #aAdd:not([data-solo]){border-top-right-radius:0; border-bottom-right-radius:0}
+.addgrp #aMode{width:24px; padding:0; justify-content:center; border-top-left-radius:0; border-bottom-left-radius:0; border-left:1px solid rgba(255,255,255,.3)}
+.addgrp #aMode svg{width:13px; height:13px; transition:transform .15s}
+.addgrp #aMode[aria-expanded="true"] svg{transform:rotate(180deg)}
+.addmenu{position:absolute; left:0; bottom:calc(100% + 6px); z-index:30; width:290px; padding:4px; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(20,24,31,.12)}
+.addmenu[hidden]{display:none}
+.addmenu button{display:grid; grid-template-columns:16px minmax(0,1fr); column-gap:8px; align-items:start; width:100%; padding:7px 8px; border:0; border-radius:6px; background:none; color:var(--ink); text-align:left; font-size:13px}
+.addmenu button:hover, .addmenu button:focus-visible{background:var(--cinnamon-soft); outline:none}
+.addmenu .ck{width:14px; height:14px; margin-top:2px; fill:none; stroke:var(--cinnamon); stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; visibility:hidden}
+.addmenu button[aria-checked="true"] .ck{visibility:visible}
+.addmenu button[aria-checked="true"] b{color:var(--cinnamon)}
+.addmenu b{font-weight:600}
+.addmenu small{grid-column:2; color:var(--muted); font-size:12px; line-height:1.35; margin-top:1px}
+.dt.arm{outline:2px dashed rgba(138,75,42,.55); outline-offset:-2px}
+/* A warning about Add segment, shown right above it */
+.addtip{position:absolute; left:0; bottom:calc(100% + 9px); z-index:31; display:flex; align-items:center; gap:6px; white-space:nowrap;
+  padding:6px 10px; border:1px solid #e9c46a; border-radius:7px; background:#fff6d9; color:#6b4a00; font-size:12.5px; font-weight:500;
+  box-shadow:0 4px 14px rgba(107,74,0,.12); animation:tipIn .18s ease-out}
+.addtip[hidden]{display:none}
+.addtip svg{width:14px; height:14px; flex:none; fill:none; stroke:#c08a00; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.addtip::after{content:""; position:absolute; left:22px; top:100%; width:8px; height:8px; margin-top:-4px; background:#fff6d9;
+  border-right:1px solid #e9c46a; border-bottom:1px solid #e9c46a; transform:rotate(45deg)}
+@keyframes tipIn{from{opacity:0; transform:translateY(3px)} to{opacity:1; transform:none}}
+@media (prefers-reduced-motion: reduce){.addtip{animation:none}}
 @keyframes pulse{from{opacity:.35} to{opacity:1}}
 .note{margin:0 0 10px; font-size:12.5px; color:var(--muted)}
 .note.err{color:var(--err)}
@@ -177,7 +204,7 @@
     return `${m}:${s.toFixed(3).padStart(6, "0")}`;
   };
   const fmtDur = (d) => (d < 60 ? `${d.toFixed(d < 10 ? 2 : 1)} s` : U.fmtClock(d));
-  const EMPTY = "No segments yet. Use Add segment while it plays, drag across the waveform, or Presegment.";
+  const EMPTY = "No segments yet. Use Mark segment while it plays, drag across the waveform, or Presegment.";
 
   // container: the side panel; bar: the segment toolbar element above the waveform.
   CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, presegment, presegState = () => ({ enabled: true, online: null }), nudgeMs = () => 50, nudgeShiftMs = () => 250, splitGapMs = () => 100 }) {
@@ -221,7 +248,14 @@
         <p class="ro" id="readOnly" hidden>This annotation is read-only. You can play and review it, but not edit it.</p>
       </div>`;
     bar.innerHTML = `
-      <button class="btn primary" id="aAdd" title="Start a segment at the playhead; press again to end it">${I.add}<span>Add segment</span></button>
+      <span class="addgrp">
+        <button class="btn primary" id="aAdd" title="Start a segment at the playhead; press again to end it">${I.add}<span>Mark segment</span></button><button class="btn primary" id="aMode" aria-haspopup="menu" aria-expanded="false" title="Choose: mark while playing, or draw on the waveform" aria-label="Choose how to add segments">${I.chev}</button>
+        <div class="addtip" id="addTip" role="alert" hidden></div>
+        <div class="addmenu" id="addMenu" role="menu" hidden>
+          <button role="menuitemradio" data-mode="mark" aria-checked="true"><svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg><b>Mark while playing</b><small>Press Mark segment where the speech starts, then Mark end where it ends.</small></button>
+          <button role="menuitemradio" data-mode="draw" aria-checked="false"><svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg><b>Draw on the waveform</b><small>Press Draw segment, then drag across an empty part of the waveform.</small></button>
+        </div>
+      </span>
       <button class="icon" id="aCancel" title="Cancel (Esc)" aria-label="Cancel adding a segment" hidden>${I.x}</button>
       <span class="sep" aria-hidden="true"></span>
       <span class="hint" id="bHint">Select a segment to edit it.</span>
@@ -263,20 +297,86 @@
         .catch(() => {});
 
     // ---- Add segment: mark start, then mark end ----
+    // How "Add segment" works: mark start / end while playing, or draw with the mouse.
+    const MODE_KEY = "cinnamonLabel.addMode";
+    const addMode = () => (localStorage.getItem(MODE_KEY) === "draw" ? "draw" : "mark");
+    let drawArmed = false; // "Add segment" in draw mode: waiting for a drag on the waveform
+    const setArmed = (on) => {
+      drawArmed = !!on;
+      timeline.dt.classList.toggle("arm", drawArmed);
+    };
+    const menu = $("addMenu");
+    let tipTimer = 0;
+    const addTip = (text) => {
+      const tip = $("addTip");
+      clearTimeout(tipTimer);
+      tip.hidden = true;
+      void tip.offsetWidth; // replay the entrance on a repeat warning
+      tip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>';
+      tip.append(text);
+      tip.hidden = false;
+      tipTimer = setTimeout(() => (tip.hidden = true), 3200);
+    };
+    const showMenu = (on) => {
+      menu.hidden = !on;
+      if (on) $("addTip").hidden = true;
+      $("aMode").setAttribute("aria-expanded", String(!!on));
+      if (on) for (const b of menu.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.mode === addMode()));
+      if (on) menu.querySelector('[aria-checked="true"]').focus();
+    };
+    CL.on($("aMode"), "click", (e) => {
+      e.stopPropagation();
+      showMenu(menu.hidden);
+    });
+    for (const b of menu.querySelectorAll("button"))
+      CL.on(b, "click", () => {
+        localStorage.setItem(MODE_KEY, b.dataset.mode);
+        showMenu(false);
+        stopMarking();
+        $("aAdd").focus();
+      });
+    CL.on(menu, "keydown", (e) => {
+      const items = [...menu.querySelectorAll("button")];
+      const i = items.indexOf(root.activeElement);
+      if (e.key === "Escape") (showMenu(false), $("aMode").focus());
+      else if (e.key === "ArrowDown" || e.key === "ArrowUp") items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    // Close the menu on any click outside it.
+    CL.on(root, "pointerdown", (e) => {
+      if (!menu.hidden && !e.composedPath().some((n) => n === menu || n === $("aMode"))) showMenu(false);
+    });
+    timeline.onCreated = () => {
+      if (!drawArmed) return;
+      setArmed(false);
+      focusNext = true; // like Mark end: straight to the new segment's form
+      api.render();
+    };
+
     function stopMarking() {
       marking = null;
       timeline.marking = null;
+      setArmed(false);
       timeline.invalidate();
       api.render();
     }
     CL.on($("aAdd"), "click", async () => {
       if (!editable()) return;
       const t = player.v.currentTime || 0;
+      if (addMode() === "draw" && !marking) {
+        // Press again (or Esc / ✕) to stop waiting for the drag.
+        if (drawArmed) return stopMarking();
+        setArmed(true);
+        setNote("");
+        return api.render();
+      }
       if (!marking) {
         const inside = S.segmentAt(base(), t);
         if (inside) {
           const n = store.segments.findIndex((g) => g.id === inside.id) + 1;
-          return flash(`The playhead is inside segment ${n}.`);
+          return addTip(`The playhead is inside segment ${n}. Move it to an empty spot first.`);
         }
         marking = { start: t };
         timeline.marking = marking;
@@ -740,7 +840,8 @@
       },
       // Esc outside text fields: cancel "Add segment". Returns true if something was cancelled.
       cancelMarking() {
-        if (!marking) return false;
+        if (!menu.hidden) return showMenu(false), true;
+        if (!marking && !drawArmed) return false;
         stopMarking();
         return true;
       },
@@ -951,14 +1052,28 @@
         // toolbar
         const i = g ? segs.findIndex((x) => x.id === g.id) : -1;
         $("aAdd").disabled = !canEdit;
+        const armed = !!marking || drawArmed;
+        const draw = addMode() === "draw";
         $("aAdd").classList.toggle("marking", !!marking);
-        $("aAdd").classList.toggle("primary", !marking);
-        $("aAdd").querySelector("span").textContent = marking ? "Mark end" : "Add segment";
-        $("aAdd").title = marking ? `Started at ${U.fmtClock(marking.start)}. Press where the speech ends.` : "Start a segment at the playhead; press again to end it";
-        $("aCancel").hidden = !marking;
-        for (const id of ["bWho", "gStart", "bDash", "gEnd", "dDur", "aPlay", "aSplit", "aMerge", "aDel"]) $(id).hidden = !g || !!marking;
-        $("bHint").hidden = !!g && !marking;
-        $("bHint").textContent = marking ? "" : canEdit ? "Select a segment to edit it." : "";
+        $("aAdd").classList.toggle("arming", drawArmed);
+        $("aAdd").classList.toggle("primary", !armed);
+        $("aAdd").querySelector("span").textContent = marking ? "Mark end" : drawArmed ? "Drawing…" : draw ? "Draw segment" : "Mark segment";
+        $("aAdd").title = marking
+          ? `Started at ${U.fmtClock(marking.start)}. Press where the speech ends.`
+          : drawArmed
+            ? "Drag across the waveform to draw the segment. Press again or Esc to stop."
+            : draw
+              ? "Then drag across the waveform to draw the segment"
+              : "Start a segment at the playhead; press again to end it";
+        $("aMode").hidden = armed;
+        $("aMode").disabled = !canEdit;
+        if (armed) $("aAdd").dataset.solo = "";
+        else delete $("aAdd").dataset.solo;
+        if (armed && !menu.hidden) showMenu(false);
+        $("aCancel").hidden = !armed;
+        for (const id of ["bWho", "gStart", "bDash", "gEnd", "dDur", "aPlay", "aSplit", "aMerge", "aDel"]) $(id).hidden = !g || armed;
+        $("bHint").hidden = !!g && !armed;
+        $("bHint").textContent = drawArmed ? "Drag across an empty part of the waveform." : marking ? "" : canEdit ? "Select a segment to edit it." : "";
         paintMarkEnd();
         if (g) {
           $("bWhoTxt").textContent = `Segment ${i + 1}`;
