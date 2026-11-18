@@ -61,6 +61,11 @@
 .withnext{display:flex; align-items:flex-start; gap:10px}
 .withnext > .chips{flex:1 1 auto; min-width:0}
 .nextbtn{margin-left:auto; flex:none}
+.rctl{display:contents}
+/* Replay / Loop above the questions while the transcript card is still hidden */
+.prebar{margin:0 0 8px}
+.prebar[hidden] + .grp{border-top:0; padding-top:0}
+.prebar[hidden] + .q, .prebar[hidden] + .tg{border-top:0; padding-top:2px}
 .tbar .loop{display:flex; align-items:center; gap:6px; margin-right:auto; padding-left:4px; font-size:13px; color:var(--ink); cursor:pointer}
 .unsup{color:var(--muted); font-size:12.5px; padding-top:5px}
 @media (prefers-reduced-motion:reduce){.sw, .sw::after{transition:none}}
@@ -135,6 +140,22 @@
         else n.root.style.removeProperty("--d");
         grp.appendChild(n.root);
       });
+      // Replay / Loop stay reachable before the transcript shows (e.g. while gender and dialect
+      // are still unanswered): they sit above the questions until the card appears.
+      const tc = this.nodes.find((n) => n.rctl);
+      if (tc) {
+        const pre = el("div", "tbar prebar");
+        wrap.prepend(pre);
+        this.nodes.push({
+          root: pre,
+          update: () => {
+            const away = tc.root.hidden;
+            const slot = away ? pre : tc.bar;
+            if (tc.rctl.parentElement !== slot) slot.prepend(tc.rctl);
+            pre.hidden = !away;
+          },
+        });
+      }
       this.nodes.push({ root: wrap, update: () => groups.forEach((g) => (g.hidden = [...g.children].every((c) => c.hidden))) });
       // "Next segment" sits at the right of the last visible question, so it comes after every
       // answer (or in the transcript card's bar if nothing follows the transcript).
@@ -272,11 +293,13 @@
         CL.onFieldKey(input, () => {}); // typed keys stay in the field (never reach Label Studio)
         root.append(input);
         const bar = el("div", "tbar");
+        const rctl = el("span", "rctl"); // Replay + Loop, moved above the form while this card is hidden
+        bar.append(rctl);
         const replay = el("button", "btn");
         replay.type = "button";
         replay.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>Replay segment`;
         CL.on(replay, "click", () => this.extras.onReplay && this.extras.onReplay());
-        if (this.extras.onReplay) bar.append(replay);
+        if (this.extras.onReplay) rctl.append(replay);
         if (this.extras.onReplay && this.extras.loop) {
           // Loop switch: on, Replay keeps repeating the segment until paused; off, it plays once.
           const lp = this.extras.loop;
@@ -292,13 +315,15 @@
             lp.set(on);
           });
           wrap.append(sw, el("span", null, "Loop"));
-          bar.append(wrap);
+          rctl.append(wrap);
         }
-        if (bar.children.length) root.append(bar);
+        if (rctl.children.length) root.append(bar);
         return {
           root,
           big: true,
           input,
+          rctl: rctl.children.length ? rctl : null,
+          bar,
           update: (values) => {
             root.hidden = !vis(values);
             const v = textValue(values[it.name]);
