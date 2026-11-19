@@ -1,6 +1,6 @@
 # Cinnamon Label
 
-A Chrome extension that gives Label Studio's video segmentation page (Cinnamon 2026 project) a smoother editor: one player with a waveform, drag-to-edit segments, a roomy right-to-left transcript box, and presegmentation suggestions.
+A Chrome extension that gives Label Studio's video segmentation page (Cinnamon 2026 project) a smoother editor: one player with a waveform, drag-to-edit segments, and a roomy right-to-left transcript box.
 
 It only changes the page's interface. It edits the annotation inside Label Studio and **never submits, updates, skips or deletes on its own**. Submitting stays a click on Label Studio's own **Submit** button, which stays visible and works as before.
 
@@ -14,8 +14,6 @@ It only changes the page's interface. It edits the annotation inside Label Studi
 6. Open (or reload) a task in Label Studio.
 
 **Updating:** pull the latest code (or unzip the new version into the same folder), click the reload ↻ icon on the Cinnamon Label card in `chrome://extensions`, then reload your Label Studio tabs. Your settings and saved videos are kept.
-
-If you still have the old SpeakerCut extension installed, you can remove it: presegmentation is built in.
 
 ## Using it
 
@@ -36,7 +34,6 @@ If you still have the old SpeakerCut extension installed, you can remove it: pre
 - **« / »** beside the play button step back / forward 2 seconds.
 - **Replay segment** (under the transcript) plays the open segment once; turn on **Loop** to repeat it until you pause. Loop is also a round button (⇄, filled when on) right under the open segment's play button, so you can set it before choosing gender and dialect; the two stay in sync, and the segment's play button loops too while it is on. Closing the segment ends the replay and the video plays on. **Next segment** is at the end of the form, beside the last question; it opens the next segment and plays it (looping too if Loop is on).
 - **Questions and transcript:** the open segment's card shows its questions and the transcript box. The whole-video questions are at the top of the side panel. Help notes from the project are at the end of the form.
-- **Presegment:** suggests segments, drawn dashed with speaker tags. Click one to add it, or use **Add all** / **Dismiss**. Nothing is added until you accept it. The button is disabled while the server isn't running.
 - **Task list:** each row has a small button: ↓ downloads that task's video now, ✓ means it is saved (click to download again), and a percentage shows a running download (click to stop).
 - **Before submitting:** edits are written into Label Studio as you work; the Submit button waits for the last one. Label Studio's draft saving is turned off on this server (it is refused), so the extension keeps a local backup of unsubmitted work and offers to restore it if the task is reopened empty.
 
@@ -61,67 +58,10 @@ Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left t
   - editing options: the close-up waveform, the nudge steps for the − / + buttons, and the split gap;
   - reload on code changes (for development only).
 - **Saved videos:** see what is saved and how much space it uses; delete one or all. The oldest are removed automatically above the size limit.
-- **Presegmentation:**
-  - turn the feature on or off;
-  - server address and status;
-  - provider;
-  - music removal;
-  - time limit;
-  - segment rules (maximum length, padding, minimum length, overlaps);
-  - speaker counts.
-
-## Presegmentation server
-
-Presegmentation sends the task's audio to a diarization server running on your own machine at `http://127.0.0.1:8000` (endpoints `/health` and `/diarize`). The server is in the `server/` folder. The status in the popup's **Presegmentation** tab turns green when it is reachable.
-
-You need a Hugging Face token (read access) and to accept the terms of [`pyannote/speaker-diarization-community-1`](https://huggingface.co/pyannote/speaker-diarization-community-1) first.
-
-```bash
-cd server
-cp .env.example .env     # then put your HF_TOKEN in .env (never commit .env)
-```
-
-Write values without quotes and keep comments on their own lines (Docker's `--env-file` reads the rest of the line literally).
-
-**Option A: Docker**
-
-```bash
-cd server
-docker build -t presegment-server .     # the first build downloads torch etc. and takes a while
-docker run -d --name presegment-server --restart unless-stopped \
-  --env-file .env -p 127.0.0.1:8000:8000 -v presegment-cache:/root/.cache \
-  presegment-server
-```
-
-- It listens on `127.0.0.1:8000` only. Models and saved results are kept in the `presegment-cache` volume, so restarts are fast.
-- NVIDIA GPU: install the NVIDIA Container Toolkit and add `--gpus all` to `docker run`. Otherwise it runs on CPU.
-- Logs: `docker logs -f presegment-server`. Stop / start: `docker stop presegment-server`, `docker start presegment-server`.
-- After changing `.env` or the code: `docker build -t presegment-server . && docker rm -f presegment-server`, then the `docker run` line again.
-
-**Option B: uv**
-
-```bash
-cd server
-uv sync                  # creates .venv (pyannote.audio, torch, demucs)
-uv run uvicorn app:app --host 127.0.0.1 --port 8000
-```
-
-Saved diarization results live in `~/.cache/speakercut/results` (set `SPEAKERCUT_CACHE_DIR` to move them); delete the folder to clear them. Tests: `uv run pytest tests`.
-
-**On a cluster:** start it on a GPU node, then tunnel from your laptop through the login node: `ssh -J <login-node> -L 8000:127.0.0.1:8000 <gpu-node>`.
-
-**Providers** (chosen in the popup):
-
-| Provider | Key in `server/.env` | Notes |
-|---|---|---|
-| Local pyannote (default) | `HF_TOKEN` | Free, runs on your GPU or CPU. |
-| pyannoteAI Precision | `PYANNOTEAI_API_KEY` | Hosted models from the pyannote authors (`PYANNOTEAI_MODEL=precision-2` or `precision-3`). Best when speakers get mixed. Paid per audio second; the audio is sent to pyannoteAI and deleted within 48 h. |
-
-**Remove music first** separates the vocals (Demucs) before diarization; it helps with loud background music. **Speaker counts** (exact, or min/max) are often the simplest fix when two speakers get merged.
 
 ## Development
 
 - Plain JavaScript, Manifest V3, no build step. Content scripts are in `extension/src/content`, the page bridge (which talks to Label Studio's annotation state) in `extension/src/page/bridge.js`, pure logic in `extension/src/shared`.
-- Tests: `node --test tests/*.test.js` (extension); `cd server && uv run pytest tests` (server)
+- Tests: `node --test tests/*.test.js`
 - Auto-reload: turn on **Reload on code changes** in the popup, then after editing run `date +%s%N > extension/build-id.txt`. The extension reloads and refreshes Label Studio tabs (never while edits are still being written).
 - Icons: `python3 tools/make_icons.py extension/icons` (needs Pillow) draws the PNG icons to match `extension/icons/logo.svg`.

@@ -13,26 +13,11 @@ const DEFAULTS = {
   nudgeMs: 50,
   nudgeShiftMs: 250,
   splitGapMs: 100,
-  psEnabled: true,
-  psServer: "http://127.0.0.1:8000",
-  psProvider: "local",
-  psRemoveMusic: false,
-  psMaxDur: 30,
-  psPad: 0.2,
-  psMinSeg: 1.0,
-  psNum: 0,
-  psMin: 0,
-  psMax: 0,
-  psDropOverlap: true,
-  psTimeoutMin: 3,
 };
-// Numbers where 0 means "auto" / "no limit": shown as an empty field with a placeholder.
-const ZERO_IS_EMPTY = ["psMaxDur", "psNum", "psMin", "psMax"];
-const PS_NUMBERS = ["psMaxDur", "psPad", "psMinSeg", "psNum", "psMin", "psMax", "psTimeoutMin"];
 const el = (id) => document.getElementById(id);
 
 // ---------- tabs ----------
-const TABS = ["general", "saved", "preseg"];
+const TABS = ["general", "saved"];
 function selectTab(name) {
   if (!TABS.includes(name)) name = "general";
   for (const t of TABS) {
@@ -68,14 +53,6 @@ function write(s) {
   if (document.activeElement !== el("splitGapMs")) el("splitGapMs").value = String(s.splitGapMs);
   el("status").dataset.state = s.enabled ? "ok" : "off";
   el("statusText").textContent = s.enabled ? "Active" : "Off";
-  // presegmentation
-  if (document.activeElement !== el("psServer")) el("psServer").value = s.psServer;
-  (document.querySelector(`input[name=psProvider][value="${s.psProvider}"]`) || document.querySelector('input[name=psProvider][value="local"]')).checked = true;
-  el("psRemoveMusic").checked = !!s.psRemoveMusic;
-  el("psEnabled").checked = s.psEnabled !== false;
-  el("psSettings").classList.toggle("off", s.psEnabled === false);
-  el("psDropOverlap").checked = !!s.psDropOverlap;
-  for (const k of PS_NUMBERS) if (document.activeElement !== el(k)) el(k).value = ZERO_IS_EMPTY.includes(k) && Number(s[k]) === 0 ? "" : String(s[k]);
 }
 function read() {
   return {
@@ -89,17 +66,6 @@ function read() {
     nudgeMs: Math.max(1, Math.min(2000, Math.round(Number(el("nudgeMs").value)))) || DEFAULTS.nudgeMs,
     nudgeShiftMs: Math.max(1, Math.min(5000, Math.round(Number(el("nudgeShiftMs").value)))) || DEFAULTS.nudgeShiftMs,
     splitGapMs: Number.isFinite(Number(el("splitGapMs").value)) && el("splitGapMs").value !== "" ? Math.max(0, Math.min(2000, Math.round(Number(el("splitGapMs").value)))) : DEFAULTS.splitGapMs,
-    psServer: el("psServer").value.trim() || DEFAULTS.psServer,
-    psProvider: document.querySelector("input[name=psProvider]:checked")?.value || DEFAULTS.psProvider,
-    psRemoveMusic: el("psRemoveMusic").checked,
-    psEnabled: el("psEnabled").checked,
-    psDropOverlap: el("psDropOverlap").checked,
-    ...Object.fromEntries(
-      PS_NUMBERS.map((k) => {
-        const n = Number(el(k).value);
-        return [k, el(k).value.trim() === "" ? (ZERO_IS_EMPTY.includes(k) ? 0 : DEFAULTS[k]) : Number.isFinite(n) && n >= 0 ? n : DEFAULTS[k]];
-      })
-    ),
   };
 }
 let flashTimer;
@@ -123,69 +89,11 @@ function save() {
 }
 document.addEventListener("change", (e) => {
   if (e.target.closest(".panel")) save();
-  if (e.target.name === "psProvider" || e.target.id === "psRemoveMusic") renderHealth();
-  if (e.target.id === "psEnabled") el("psSettings").classList.toggle("off", !e.target.checked);
 });
 el("reset").addEventListener("click", () => {
   write(DEFAULTS);
-  chrome.storage.sync.set(read(), () => {
-    flash("Defaults restored");
-    checkServer();
-  });
+  chrome.storage.sync.set(read(), () => flash("Defaults restored"));
 });
-
-// ---------- presegmentation server status ----------
-let health = null; // last /health answer
-let checkSeq = 0;
-function setPsStatus(state, text) {
-  el("psStatus").dataset.state = state;
-  el("psStatusText").textContent = text;
-}
-function psInfo(parts) {
-  el("psInfo").replaceChildren(
-    ...parts.map(([cls, t], i) => {
-      const span = document.createElement("span");
-      if (cls) span.className = cls;
-      span.textContent = (i ? ". " : "") + t;
-      return span;
-    })
-  );
-}
-function renderHealth() {
-  const s = read();
-  if (!health) {
-    setPsStatus("down", "Offline");
-    psInfo([["err", `Can't reach ${s.psServer}. Start the server, or fix the address`]]);
-    return;
-  }
-  const d = health;
-  const p = d.providers || {};
-  const warn = [];
-  if (s.psProvider === "local" && d.hf_token_set === false) warn.push("HF_TOKEN is missing on the server");
-  if (s.psProvider === "pyannoteai" && !p.pyannoteai) warn.push("PYANNOTEAI_API_KEY is missing on the server");
-  if (s.psRemoveMusic && d.separation === false) warn.push("music removal isn't installed on the server (run uv sync)");
-  setPsStatus(warn.length ? "warn" : "ok", d.cuda ? "Online, GPU" : "Online, CPU");
-  psInfo(warn.length ? warn.map((w) => ["warn", w]) : []);
-}
-function checkServer() {
-  const seq = ++checkSeq;
-  setPsStatus("checking", "Checking");
-  chrome.runtime.sendMessage({ type: "CL_PS_HEALTH", serverUrl: read().psServer }, (r) => {
-    void chrome.runtime.lastError;
-    if (seq !== checkSeq) return; // a newer check started
-    health = r && r.ok ? r.data : null;
-    renderHealth();
-  });
-}
-let urlTimer;
-el("psServer").addEventListener("input", () => {
-  clearTimeout(urlTimer);
-  urlTimer = setTimeout(() => {
-    save();
-    checkServer();
-  }, 600);
-});
-el("psStatus").addEventListener("click", checkServer);
 
 // ---------- saved videos ----------
 function ago(ts) {
@@ -307,10 +215,8 @@ chrome.storage.onChanged.addListener((_c, area) => area === "local" && renderSav
 chrome.storage.sync.get(DEFAULTS, (s) => {
   write(s);
   renderSaved();
-  checkServer();
   requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("ready")));
 });
-setInterval(checkServer, 10000); // notice the server going down (or coming back) while the popup is open
 
 // ---------- field help tooltips ----------
 const tipBox = el("tooltip");

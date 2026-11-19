@@ -1,6 +1,6 @@
 // Decodes a task's audio once, straight from the MP4's audio track, into:
 //  - waveform peaks (min/max per 5 ms) for the timeline, filled in progressively;
-//  - a 16 kHz mono copy for presegmentation (no need for Label Studio's waveform).
+//  - a 16 kHz mono copy, for the waveform at deep zoom (finer than the peaks).
 // Uses WebCodecs' AudioDecoder; falls back to decodeAudioData on the complete file.
 (() => {
   const CL = globalThis.CL;
@@ -61,13 +61,6 @@
       if (!force && now - (this._lastNotify || 0) < 150) return;
       this._lastNotify = now;
       this.onUpdate(this);
-    }
-
-    // 16 kHz mono Float32Array (for presegmentation).
-    pcm16k() {
-      const out = new Float32Array(this._pcmSum.length);
-      for (let j = 0; j < out.length; j++) out[j] = this._pcmCnt[j] ? this._pcmSum[j] / this._pcmCnt[j] : 0;
-      return out;
     }
 
     close() {

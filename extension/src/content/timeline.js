@@ -1,5 +1,5 @@
 // Two-lane timeline drawn on canvases.
-//  Overview: the whole video, with segments and suggestions in miniature. Click or drag to seek.
+//  Overview: the whole video, with segments in miniature. Click or drag to seek.
 //  Detail:   a zoomed window (15 s by default) that follows the playhead. Ruler with times.
 //            Ctrl+wheel or the buttons zoom; the wheel pans. Click to seek.
 // The <video> element is the only clock; the timeline only reads it and seeks it.
@@ -30,9 +30,6 @@
     segEdgeOv: "#5f6776",
     playedSel: "#7a3c1e",
     waveSel: "#d9b8a5",
-    sugFill: "rgba(61,68,82,0.035)",
-    sugLine: "#6f7785",
-    sugOv: "#a7aebb",
   };
   const STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
   const MIN_SPAN = 1;
@@ -219,20 +216,12 @@
       if (edge) this.drag = { kind: "edge", id: edge.id, edge: edge.edge, base, x0: x };
       else {
         const inside = globalThis.CLSeg.segmentAt(base, t);
-        // On a suggestion (outside real segments): a click adds it, a drag still creates a segment.
-        const sug = !inside && this.editable ? this._sugAt(t) : null;
-        this.drag = inside ? { kind: "select", id: inside.id, x0: x, t0: t, base, seg: inside, move: CL.moveKey(e) } : { kind: "create", t0: this._snap(t, e), base, x0: x, sug };
+        this.drag = inside ? { kind: "select", id: inside.id, x0: x, t0: t, base, seg: inside, move: CL.moveKey(e) } : { kind: "create", t0: this._snap(t, e), base, x0: x };
       }
     }
     // The ruler strip along the top of the lane (scrub zone).
     _inRuler(e) {
       return e.clientY - this.dt.getBoundingClientRect().top < RULER_CSS;
-    }
-    get sugs() {
-      return (this.store && this.store.suggestions) || [];
-    }
-    _sugAt(t) {
-      return this.sugs.find((s) => s.start <= t && s.end >= t) || null;
     }
     _move(e) {
       const x = this._localX(e);
@@ -254,13 +243,8 @@
         const t = this._xToTime(e);
         const inSeg = S.segmentAt(this.segs, t);
         this._hoverInSeg = !!inSeg;
-        const sug = !this.hoverEdge && !inSeg && this.editable ? this._sugAt(t) : null;
-        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : sug ? "copy" : !this.editable ? "pointer" : inSeg ? (CL.moveKey(e) ? "grab" : "pointer") : "crosshair";
-        this.dt.title = sug
-          ? `Click to add this suggested segment (${sug.speaker}), or drag to make your own.`
-          : inSeg && this.editable && !this.hoverEdge
-            ? `Click to select. ${CL.MOVE_KEY} + drag to move the whole segment.`
-            : "";
+        this.dt.style.cursor = this.hoverEdge ? "ew-resize" : !this.editable ? "pointer" : inSeg ? (CL.moveKey(e) ? "grab" : "pointer") : "crosshair";
+        this.dt.title = inSeg && this.editable && !this.hoverEdge ? `Click to select. ${CL.MOVE_KEY} + drag to move the whole segment.` : "";
         return this.invalidate();
       }
       d.moved = d.moved || Math.abs(x - d.x0) > 3;
@@ -302,11 +286,6 @@
       const t = this._xToTime(e);
       const store = this.store;
       if (!d.moved) {
-        if (d.sug && this.onSuggestion) {
-          this.onSuggestion(d.sug); // add the clicked suggestion as a real segment
-          this.invalidate();
-          return;
-        }
         if (d.kind === "select" || d.kind === "edge") {
           if (store) store.select(d.id);
         } else if (store) store.select(null);
@@ -506,20 +485,8 @@
           const playX = (t / d) * w;
           const top = 0;
           const bottom = h - 4 * dpr; // the buffered strip sits below
-          // A miniature of the detail lane: suggestions (dashed) and segments (tinted, edged) behind
-          // the waveform, the selected segment in cinnamon.
-          ctx.save();
-          ctx.setLineDash([4 * dpr, 3 * dpr]);
-          ctx.strokeStyle = C.sugLine;
-          ctx.lineWidth = dpr;
-          for (const s of this.sugs) {
-            const x0 = (s.start / d) * w;
-            const x1 = (s.end / d) * w;
-            ctx.fillStyle = C.sugFill;
-            ctx.fillRect(x0, top, x1 - x0, bottom - top);
-            ctx.strokeRect(x0 + dpr / 2, top + dpr / 2, Math.max(dpr, x1 - x0 - dpr), bottom - top - dpr);
-          }
-          ctx.restore();
+          // A miniature of the detail lane: segments (tinted, edged) behind the waveform, the
+          // selected segment in cinnamon.
           const sel = this.store && this.store.selected;
           const passing = this._passing(t);
           for (const g of this.segs) {
@@ -584,26 +551,6 @@
           }
           ctx.fillStyle = C.tick;
           ctx.fillRect(0, rulerH, w, dpr);
-          // presegmentation suggestions (dashed, behind everything; real segments draw over them)
-          ctx.save();
-          ctx.setLineDash([5 * dpr, 4 * dpr]);
-          ctx.lineWidth = 1.5 * dpr;
-          ctx.font = `600 ${10 * dpr}px system-ui, sans-serif`;
-          ctx.textBaseline = "middle";
-          for (const s of this.sugs) {
-            const x0 = toX(s.start);
-            const x1 = toX(s.end);
-            if (x1 < 0 || x0 > w) continue;
-            ctx.fillStyle = C.sugFill;
-            ctx.fillRect(x0, rulerH + dpr, x1 - x0, h - rulerH - dpr);
-            ctx.strokeStyle = C.sugLine;
-            ctx.strokeRect(x0 + dpr, rulerH + 2 * dpr, x1 - x0 - 2 * dpr, h - rulerH - 4 * dpr);
-            if (x1 - x0 > 26 * dpr) {
-              ctx.fillStyle = C.sugLine;
-              ctx.fillText(s.speaker || "", Math.max(x0, 0) + 5 * dpr, h - 10 * dpr);
-            }
-          }
-          ctx.restore();
           // segment blocks (behind the waveform)
           const sel = this.store && this.store.selected;
           const passing = this._passing(t);
