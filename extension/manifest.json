@@ -5,7 +5,8 @@
   "version": "0.1.0",
   "description": "Cinnamon Label: smooth playback, waveform segment editing and a roomy transcript box for Label Studio. Never submits.",
   "permissions": [
-    "storage"
+    "storage",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://annotation.dlnlp.ai/*"
@@ -39,11 +40,22 @@
       ],
       "js": [
         "src/shared/util.js",
+        "src/shared/mp4.js",
+        "src/shared/segments.js",
+        "src/shared/config.js",
         "src/content/core.js",
         "src/content/cache.js",
         "src/content/downloader.js",
+        "src/content/audio.js",
         "src/content/player.js",
+        "src/content/timeline.js",
+        "src/content/segstore.js",
+        "src/content/backup.js",
+        "src/content/form.js",
+        "src/content/panel.js",
         "src/content/overlay.js",
+        "src/content/prefetch.js",
+        "src/content/tasklist.js",
         "src/content/main.js"
       ],
       "run_at": "document_idle"

@@ -74,6 +74,55 @@
       this.seekTo((this.v.currentTime || 0) + d);
     }
 
+    // Play [a, b) and stop at b. Any manual pause or seek outside the range cancels the stop.
+    // Play [a, b] and stop at b; with loop, start again from a until paused (or setLoop(false)).
+    playRange(a, b, { loop = false } = {}) {
+      const v = this.v;
+      if (!v.currentSrc || !(b > a)) return;
+      this._range = [a, b];
+      this._loop = !!loop;
+      this.seekTo(a);
+      v.preload = "auto";
+      v.play().catch(() => {});
+      if (!this._rangeHooked) {
+        this._rangeHooked = true;
+        v.addEventListener("pause", () => (this._range = null));
+        v.addEventListener("seeking", () => {
+          const r = this._range;
+          if (r && (v.currentTime < r[0] - 0.05 || v.currentTime > r[1] + 0.05)) this._range = null;
+        });
+      }
+      const startedAt = performance.now();
+      const watch = () => {
+        const r = this._range;
+        if (!r) return;
+        if (v.paused) {
+          // play() may not have started yet; give up if it never does.
+          if (performance.now() - startedAt > 3000) this._range = null;
+          else requestAnimationFrame(watch);
+          return;
+        }
+        if (v.currentTime >= r[1]) {
+          if (this._loop) {
+            v.currentTime = r[0]; // again from the start (inside the range, so it isn't cancelled)
+            requestAnimationFrame(watch);
+            return;
+          }
+          this._range = null;
+          v.pause();
+          v.currentTime = r[1];
+          return;
+        }
+        requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+    }
+
+    // Turn looping on or off for the range playing now (if any).
+    setLoop(on) {
+      this._loop = !!on;
+    }
+
     setRate(r) {
       this.v.defaultPlaybackRate = this.v.playbackRate = r;
     }

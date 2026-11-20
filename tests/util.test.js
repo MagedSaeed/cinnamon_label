@@ -48,6 +48,14 @@ test("fmtClock / fmtBytes / fmtEta", () => {
   assert.equal(U.fmtEta(NaN), "");
 });
 
+test("parseDuration accepts seconds and clock formats", () => {
+  for (const [input, want] of [
+    ["8", 8], ["8.5", 8.5], ["8,5", 8.5], ["8 s", 8], ["8s", 8], [" 12 sec ", 12],
+    ["1:30", 90], ["1:30.5", 90.5], ["0:05", 5], ["1:02:03", 3723],
+  ]) assert.equal(U.parseDuration(input), want, input);
+  for (const bad of ["", "abc", "1:75", "-3", "1::2", "s", null]) assert.equal(U.parseDuration(bad), null, String(bad));
+});
+
 test("SpeedMeter measures over its window", () => {
   const m = new U.SpeedMeter(4000);
   for (let t = 0; t <= 10000; t += 500) m.add(t, t * 1000); // 1 MB/s

@@ -36,6 +36,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border: 3px solid var(--bg); border-radius: 999px; min-height: 40px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 
 /* Header */
 .hero {
@@ -79,9 +80,35 @@ section { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .col > :last-child, .panel > section:last-child { border-bottom: 0; }
 h2 { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
 
-.field { display: block; margin-bottom: 4px; }
-.name { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 550; color: var(--muted); }
+.field { display: block; margin-bottom: 10px; }
+.name { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: 550; color: var(--muted); }
 .info { margin: 8px 0; font-size: 11.5px; color: var(--muted); }
+.info:empty { display: none; }
+.info .warn { color: #B7791F; }
+.info .err { color: var(--bad); }
+
+/* text and number inputs */
+input[type=url], input[type=text], input[type=number] {
+  width: 100%; min-width: 0; padding: 6px 8px; font: inherit; color: inherit;
+  background: var(--field); border: 1px solid transparent; border-radius: 7px; outline: none;
+  transition: border-color .15s, background .15s;
+}
+input[type=number] { font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=url]:hover, input[type=number]:hover { border-color: var(--line); }
+input[type=url]:focus, input[type=number]:focus { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px var(--accent-soft); }
+input::placeholder { color: var(--muted); opacity: .8; }
+.num { display: block; }
+.num > span:first-child { display: flex; align-items: center; margin-bottom: 3px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.unit { position: relative; display: block; }
+.unit input { padding-right: 22px; }
+.unit em { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 11.5px; color: var(--muted); pointer-events: none; }
+.segmented.three { grid-template-columns: repeat(3, 1fr); }
+.num.inline { display: flex; align-items: center; gap: 10px; margin: 6px 0 8px; }
+.num.inline > span:first-child { margin: 0; }
+.num.inline .unit { width: 92px; }
+.unit em { right: 8px; }
+
 .empty { margin: 16px 0; color: var(--muted); max-width: 60ch; }
 
 /* Segmented control */
@@ -123,6 +150,13 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 .list li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1px 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .list li:last-child { border-bottom: 0; }
 .list .name { margin: 0; font-size: 13px; font-weight: 550; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .task { color: inherit; text-decoration: none; }
+.list .task:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.list .task:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.list .status { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 550; color: var(--muted); background: var(--field); }
+.list .status:empty { display: none; }
+.list .status[data-s="submitted"], .list .status[data-s="skipped"] { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.list .status[data-s="open"] { color: var(--accent); background: var(--accent-soft); }
 .list .file { grid-column: 1; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list .size { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
 .list .del { grid-column: 2; grid-row: 2; justify-self: end; }
@@ -159,3 +193,4 @@ body:not(.ready) *, body:not(.ready) *::before, body:not(.ready) *::after { tran
 @media (prefers-color-scheme: dark) { #tooltip { background: #2A3854; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+

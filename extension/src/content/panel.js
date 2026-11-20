@@ -1,0 +1,1010 @@
+// The segment UI, in two places:
+//  - the segment toolbar above the waveform: Add segment (mark start / mark end), the selected
+//    segment's start/end, play, split, merge, delete, undo/redo (where editing happens);
+//  - the side panel: whole-video fields, then one card per segment (an accordion): the collapsed
+//    card summarises the segment (time, status, answers, transcript preview); clicking its header
+//    opens the segment's form in place and closes the previously open one.
+// All edits go through the SegmentStore (which writes into Label Studio's annotation).
+(() => {
+  const CL = globalThis.CL;
+  const U = CL.U;
+
+  CL.PANEL_CSS = `
+[hidden]{display:none !important}
+.panel{display:flex; flex-direction:column; gap:14px; min-height:0}
+.ph{display:flex; align-items:baseline; gap:8px}
+.ph h2{margin:0; font-size:14px; font-weight:650}
+.ph .count{color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums}
+.ph{align-items:center}
+.ph .sum{margin-left:auto; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+.icon{width:30px; height:30px; display:grid; place-items:center; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); padding:0; flex:none}
+.icon svg, .btn svg{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.icon:disabled{opacity:.35; cursor:default}
+.icon:not(:disabled):hover{border-color:#c9ced6}
+/* segment cards */
+.cards{display:flex; flex-direction:column; gap:8px}
+.card{display:grid; grid-template-columns:auto minmax(0,1fr); border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden}
+.cbody{grid-column:1 / -1}
+.card{transition:background-color .25s, border-color .25s}
+/* An inner glow from the left and right edges: the card being played (amber) and the open card
+   (faint cinnamon). Drawn on a layer above the contents, so header backgrounds don't hide it. */
+.card{position:relative}
+.card::after{content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:0; transition:opacity .3s}
+.card.passing{border-color:#e6c27c}
+/* --lvl (0..1): the loudness at the playhead, so the glow rises and falls with the voice. */
+.card.passing::after{opacity:1; box-shadow:inset 14px 0 18px -12px rgb(217 147 31 / calc(.06 + .26 * var(--lvl, .5))), inset -14px 0 18px -12px rgb(217 147 31 / calc(.06 + .26 * var(--lvl, .5)))}
+.card.open::after{opacity:1; box-shadow:inset 10px 0 14px -10px rgba(138,75,42,.12), inset -10px 0 14px -10px rgba(138,75,42,.12)}
+@media (prefers-reduced-motion:reduce){ .card::after{transition:none} }
+.ch .mini{grid-column:2 / -1; display:block; width:100%; height:22px; margin-top:4px}
+@media (prefers-reduced-motion:reduce){ .card{transition:none} }
+/* play this segment (beside the header: a button can't contain another button) */
+.cplay{position:relative; align-self:stretch; display:grid; place-items:start center; width:48px; padding:12px 4px 0 8px; border:0; background:none; color:var(--muted)}
+/* a light divider between the play button and the header */
+.cplay::after{content:""; position:absolute; right:0; top:10px; bottom:10px; width:1px; background:#e9ecf0}
+.cplay span{display:grid; place-items:center; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--panel)}
+.cplay svg{width:12px; height:12px; fill:currentColor}
+.cplay:hover span{border-color:var(--cinnamon); color:var(--cinnamon)}
+.cplay.on span{background:var(--cinnamon); border-color:var(--cinnamon); color:#fff}
+.card.open .cplay{background:var(--cinnamon-soft); border-bottom:1px solid #ecdcd2}
+.cplay:hover + .ch{background:var(--surface)}
+.card.open .cplay:hover + .ch{background:var(--cinnamon-soft)}
+.card.open{border-color:#e2c3b0; box-shadow:0 2px 10px rgba(138,75,42,.07)}
+.ch{display:grid; grid-template-columns:auto 1fr auto auto auto; align-items:center; column-gap:12px; row-gap:3px; width:100%; padding:10px 12px;
+  border:0; background:none; text-align:left; cursor:pointer; font-variant-numeric:tabular-nums}
+.ch:hover{background:var(--surface)}
+.card.open .ch{background:var(--cinnamon-soft); border-bottom:1px solid #ecdcd2}
+.ch .n{grid-row:1 / span 3; align-self:start; display:inline-grid; place-items:center; min-width:26px; height:26px; padding:0 6px; border-radius:6px;
+  background:#7d8594; color:#fff; font-size:12.5px; font-weight:650}
+.card.open .ch .n{background:var(--cinnamon)}
+.ch .t{font-weight:600; color:var(--ink)}
+.ch .t span{font-weight:400; color:var(--muted); margin-left:8px}
+.ch .chev{width:16px; height:16px; color:var(--muted); transition:transform .15s}
+.card.open .ch .chev{transform:rotate(180deg)}
+.ch .sub{grid-column:2 / -1; display:flex; flex-wrap:wrap; gap:4px; margin-top:2px}
+.ch .sub .tag{padding:1px 7px; border:1px solid var(--line); border-radius:999px; background:#f3f4f6; color:#3d4452; font-size:12px; line-height:1.5; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* Skipped: full strength (still clickable), marked by faint diagonal stripes and a dashed skip tag. */
+.card.skipped{background:linear-gradient(to bottom, #fff 62%, rgba(255,255,255,0) 92%), repeating-linear-gradient(135deg, #fff 0 9px, #f6f7f9 9px 18px)}
+.card.skipped .ch .sub .tag[data-k="skip"]{border-style:dashed; background:#fff}
+/* Opening a segment: its form eases in rather than popping. */
+@keyframes clOpen{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none}}
+.card.open #detail{animation:clOpen .2s ease-out}
+@media (prefers-reduced-motion: reduce){.card.open #detail{animation:none}}
+.ch .sub .tag[data-d]{font-weight:600}
+.ch .sub .tag[data-d="0"]{--dc:#0f6b5c; --db:#e2f3ef; --dl:#a9d8cc}
+.ch .sub .tag[data-d="1"]{--dc:#2f6b22; --db:#e8f4e3; --dl:#b5d9a8}
+.ch .sub .tag[data-d="2"]{--dc:#5a3fa0; --db:#eee9fa; --dl:#cbbdef}
+.ch .sub .tag[data-d="3"]{--dc:#6b6216; --db:#f3f1dc; --dl:#d9d29a}
+.ch .sub .tag[data-d="4"]{--dc:#1f5f73; --db:#e2f1f6; --dl:#a8d2df}
+.ch .sub .tag[data-d="5"]{--dc:#6e2f6e; --db:#f4e7f4; --dl:#dbb6db}
+.ch .sub .tag[data-d="6"]{--dc:#3f4d63; --db:#e9edf3; --dl:#bcc6d6}
+.ch .sub .tag[data-d="7"]{--dc:#7a4a3a; --db:#f5ebe6; --dl:#dfc1b5}
+/* the main dialect: solid; the alternatives: dashed outline, after a small "also" */
+.ch .sub .tag[data-d]{color:#fff; background:var(--dc); border-color:var(--dc); font-size:13px; padding:1px 10px}
+.ch .sub .tag[data-d][data-alt]{color:var(--dc); background:#fff; border:1px dashed var(--dl); font-weight:500; font-size:11px; padding:0 6px; align-self:center}
+.ch .sub .qsep{align-self:center; width:1px; height:16px; margin:0 4px; background:#c3c9d2}
+.ch .sub .also{align-self:center; margin:0 -1px 0 2px; color:var(--faint); font-size:11.5px; font-style:italic}
+.ch .sub .tag[data-k="m"]{background:#e7f0fb; border-color:#b9d3f1; color:#1f4f8a; font-weight:600}
+.ch .sub .tag[data-k="f"]{background:#fbe9f1; border-color:#f0bfd4; color:#8a2554; font-weight:600}
+.ch .pv{grid-column:2 / -1; direction:rtl; text-align:right; color:var(--ink); font-size:15px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; /* the whole transcript, for reviewing */
+  font-family:"Noto Naskh Arabic","Amiri","Scheherazade New","Noto Sans Arabic","Segoe UI",serif}
+.ch .pv.none{direction:ltr; text-align:left; font-family:inherit; font-size:12.5px; color:var(--faint); font-style:italic}
+.cb{padding:12px 14px 14px}
+.pill{padding:2px 10px; border-radius:999px; font-size:12px; white-space:nowrap}
+.ch .lp{grid-row:1; grid-column:3; padding:2px 9px; border:1px solid var(--cinnamon); border-radius:999px; color:var(--cinnamon); background:#fff; font-size:12px; font-weight:600; white-space:nowrap; cursor:pointer}
+.ch .lp:hover{background:var(--cinnamon); color:#fff}
+.ch .pill{grid-row:1; grid-column:4}
+.ch .chev{grid-row:1; grid-column:5}
+.pill.ok{background:#e7f3ed; color:var(--ok)}
+.pill.need{background:#fff; color:var(--cinnamon); border:1px solid #ead7cb}
+.empty{margin:0; color:var(--ink); line-height:1.5}
+.empty .help2{display:block; margin-top:4px; color:var(--muted); font-size:12.5px}
+.empty .help2:empty{display:none}
+.btn{display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); white-space:nowrap; font-size:13px}
+.btn:hover:not(:disabled){border-color:#c9ced6}
+.btn:disabled{opacity:.4; cursor:default}
+.btn.primary{background:var(--cinnamon); border-color:var(--cinnamon); color:#fff}
+.btn.danger{color:var(--err)}
+.btn.danger:hover:not(:disabled){border-color:#e8b4ae}
+.btn.marking{background:#fff; border-color:var(--cinnamon); color:var(--cinnamon)}
+.btn.marking::before{content:""; width:8px; height:8px; border-radius:50%; background:var(--err); animation:pulse 1s ease-in-out infinite alternate}
+.btn.arming{background:#fff; border-color:var(--cinnamon); color:var(--cinnamon)}
+/* Add segment + its mode menu (opens upwards: the bar is at the bottom) */
+.addgrp{position:relative; display:inline-flex; flex:none}
+.addgrp #aAdd:not([data-solo]){border-top-right-radius:0; border-bottom-right-radius:0}
+.addgrp #aMode{width:24px; padding:0; justify-content:center; border-top-left-radius:0; border-bottom-left-radius:0; border-left:1px solid rgba(255,255,255,.3)}
+.addgrp #aMode svg{width:13px; height:13px; transition:transform .15s}
+.addgrp #aMode[aria-expanded="true"] svg{transform:rotate(180deg)}
+.addmenu{position:absolute; left:0; bottom:calc(100% + 6px); z-index:30; width:290px; padding:4px; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(20,24,31,.12)}
+.addmenu[hidden]{display:none}
+.addmenu button{display:grid; grid-template-columns:16px minmax(0,1fr); column-gap:8px; align-items:start; width:100%; padding:7px 8px; border:0; border-radius:6px; background:none; color:var(--ink); text-align:left; font-size:13px}
+.addmenu button:hover, .addmenu button:focus-visible{background:var(--cinnamon-soft); outline:none}
+.addmenu .ck{width:14px; height:14px; margin-top:2px; fill:none; stroke:var(--cinnamon); stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; visibility:hidden}
+.addmenu button[aria-checked="true"] .ck{visibility:visible}
+.addmenu button[aria-checked="true"] b{color:var(--cinnamon)}
+.addmenu b{font-weight:600}
+.addmenu small{grid-column:2; color:var(--muted); font-size:12px; line-height:1.35; margin-top:1px}
+.dt.arm{outline:2px dashed rgba(138,75,42,.55); outline-offset:-2px}
+/* A warning about Add segment, shown right above it */
+.addtip{position:absolute; left:0; bottom:calc(100% + 9px); z-index:31; display:flex; align-items:center; gap:6px; white-space:nowrap;
+  padding:6px 10px; border:1px solid #e9c46a; border-radius:7px; background:#fff6d9; color:#6b4a00; font-size:12.5px; font-weight:500;
+  box-shadow:0 4px 14px rgba(107,74,0,.12); animation:tipIn .18s ease-out}
+.addtip[hidden]{display:none}
+.addtip svg{width:14px; height:14px; flex:none; fill:none; stroke:#c08a00; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
+.addtip::after{content:""; position:absolute; left:22px; top:100%; width:8px; height:8px; margin-top:-4px; background:#fff6d9;
+  border-right:1px solid #e9c46a; border-bottom:1px solid #e9c46a; transform:rotate(45deg)}
+@keyframes tipIn{from{opacity:0; transform:translateY(3px)} to{opacity:1; transform:none}}
+@media (prefers-reduced-motion: reduce){.addtip{animation:none}}
+@keyframes pulse{from{opacity:.35} to{opacity:1}}
+.note{margin:0 0 10px; font-size:12.5px; color:var(--muted)}
+.note.err{color:var(--err)}
+.note:empty{display:none}
+.restore{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border-radius:8px; background:var(--cinnamon-soft); border:1px solid #e6cfc2}
+.restore span{flex:1; min-width:200px}
+.whole{display:flex; flex-direction:column; gap:4px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel)}
+.whole .links{display:flex; gap:8px; flex-wrap:wrap; padding:2px 0}
+.whole .links a{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--line); border-radius:6px; color:var(--ink); text-decoration:none; font-size:13px}
+.whole .links a:hover{border-color:#c9ced6}
+.whole .tg.lead{border-top:0; padding:0; flex-wrap:wrap; gap:10px}
+.whole .tg.lead .links{margin-right:auto}
+.skipnote{margin:0; padding:10px 12px; border-radius:8px; background:var(--surface); border:1px solid var(--line); color:var(--muted)}
+.ro{margin:0; padding:8px 10px; border-radius:6px; background:var(--surface); color:var(--muted); border:1px solid var(--line)}
+/* segment toolbar (above the waveform) */
+.segbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0}
+.segbar .sep{width:1px; height:22px; background:var(--line); margin:0 4px}
+.segbar .who{display:inline-flex; align-items:center; gap:4px; padding:3px 4px 3px 10px; border-radius:999px; background:var(--cinnamon-soft);
+  font-weight:650; color:var(--cinnamon); white-space:nowrap}
+.segbar .who button{width:20px; height:20px; display:grid; place-items:center; padding:0; border:0; border-radius:50%; background:none; color:var(--cinnamon)}
+.segbar .who button:hover{background:#ecd6c9}
+.segbar .who svg{width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round}
+.segbar .hint{color:var(--muted); font-size:12.5px}
+.tgrp{display:inline-flex; align-items:center}
+.tgrp .tf{border-radius:0; border-left:0; border-right:0}
+.nudge{width:24px; height:28px; padding:0; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:15px; line-height:1}
+.nudge:first-child{border-radius:6px 0 0 6px}
+.nudge:last-child{border-radius:0 6px 6px 0}
+.nudge:hover:not(:disabled){background:var(--cinnamon-soft); color:var(--cinnamon)}
+.nudge:disabled{opacity:.4; cursor:default}
+.tf{width:96px; padding:4px 7px; font:inherit; font-size:13px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; font-variant-numeric:tabular-nums}
+.tf:focus{outline:none; border-color:var(--cinnamon); box-shadow:0 0 0 3px var(--cinnamon-soft)}
+.segbar .dash{color:var(--muted)}
+.segbar .dur{color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.btn.marking::before{animation:none} .ch .chev{transition:none}}
+`;
+
+  const I = {
+    add: `<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`,
+    undo: `<svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>`,
+    redo: `<svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>`,
+    play: `<svg viewBox="0 0 24 24"><path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/></svg>`,
+    split: `<svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M5 8h4M5 16h4M15 8h4M15 16h4"/></svg>`,
+    merge: `<svg viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg>`,
+    del: `<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`,
+    x: `<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>`,
+    chev: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
+    playSmall: `<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`,
+    pauseSmall: `<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>`,
+  };
+
+  const fmtMs = (t) => {
+    const ms = Math.round(t * 1000);
+    const m = Math.floor(ms / 60000);
+    const s = (ms % 60000) / 1000;
+    return `${m}:${s.toFixed(3).padStart(6, "0")}`;
+  };
+  const fmtDur = (d) => (d < 60 ? `${d.toFixed(d < 10 ? 2 : 1)} s` : U.fmtClock(d));
+  const EMPTY = "No segments yet. Use Mark segment while it plays, or drag across the waveform.";
+
+  // container: the side panel; bar: the segment toolbar element above the waveform.
+  CL.createPanel = function createPanel(container, { bar, player, timeline, textFields, nudgeMs = () => 50, nudgeShiftMs = () => 250, splitGapMs = () => 100 }) {
+    let store = null;
+    let form = null;
+    let taskView = null;
+    let segView = null;
+    let ui = null;
+    let focusNext = false; // focus the transcript after the next selection made from the panel
+    let marking = null; // { start } while "Add segment" waits for "Mark end"
+    const S = globalThis.CLSeg;
+    const CFG = globalThis.CLConfig;
+
+    container.innerHTML = `
+      <div class="panel">
+        <section class="whole" id="whole" hidden>
+          <div class="links" id="links"></div>
+          <div id="taskForm"></div>
+        </section>
+        <p class="skipnote" id="skipNote" hidden>This video is marked to skip as a whole, so segments are not part of the answer (Label Studio leaves them out). Turn the switch off to work on segments.</p>
+        <div class="restore" id="restore" role="region" aria-label="Backup" hidden>
+          <span id="rTxt"></span>
+          <button class="btn primary" id="rDo">Restore</button>
+          <button class="btn" id="rNo">Discard</button>
+        </div>
+        <div class="ph"><h2>Segments <span class="count" id="segCount"></span></h2><span class="sum" id="segSum"></span></div>
+        <div class="cards" id="cards" role="list" aria-label="Segments"></div>
+        <p class="empty" id="segEmpty"><span id="segEmptyMain">${EMPTY}</span><span class="help2" id="segEmptyHelp"></span></p>
+        <div hidden id="holder"><div class="cb" id="detail"><p class="note" id="dNote"></p><div id="form"></div></div></div>
+        <p class="ro" id="readOnly" hidden>This annotation is read-only. You can play and review it, but not edit it.</p>
+      </div>`;
+    bar.innerHTML = `
+      <span class="addgrp">
+        <button class="btn primary" id="aAdd" title="Start a segment at the playhead; press again to end it">${I.add}<span>Mark segment</span></button><button class="btn primary" id="aMode" aria-haspopup="menu" aria-expanded="false" title="Choose: mark while playing, or draw on the waveform" aria-label="Choose how to add segments">${I.chev}</button>
+        <div class="addtip" id="addTip" role="alert" hidden></div>
+        <div class="addmenu" id="addMenu" role="menu" hidden>
+          <button role="menuitemradio" data-mode="mark" aria-checked="true"><svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg><b>Mark while playing</b><small>Press Mark segment where the speech starts, then Mark end where it ends.</small></button>
+          <button role="menuitemradio" data-mode="draw" aria-checked="false"><svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg><b>Draw on the waveform</b><small>Press Draw segment, then drag across an empty part of the waveform.</small></button>
+        </div>
+      </span>
+      <button class="icon" id="aCancel" title="Cancel (Esc)" aria-label="Cancel adding a segment" hidden>${I.x}</button>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="hint" id="bHint">Select a segment to edit it.</span>
+      <span class="who" id="bWho" hidden><span id="bWhoTxt"></span><button id="aUnsel" title="Unselect (Esc)" aria-label="Unselect this segment">${I.x}</button></span>
+      <span class="tgrp" id="gStart" hidden><button class="nudge" data-edge="start" data-dir="-1" title="Start 0.05 s earlier (Shift: 0.25 s)" aria-label="Start earlier">−</button><input class="tf" id="dStart" spellcheck="false" autocomplete="off" aria-label="Segment start" title="Start (e.g. 12.5 or 0:12.500), Enter to apply"><button class="nudge" data-edge="start" data-dir="1" title="Start 0.05 s later (Shift: 0.25 s)" aria-label="Start later">+</button></span>
+      <span class="dash" id="bDash" hidden>–</span>
+      <span class="tgrp" id="gEnd" hidden><button class="nudge" data-edge="end" data-dir="-1" title="End 0.05 s earlier (Shift: 0.25 s)" aria-label="End earlier">−</button><input class="tf" id="dEnd" spellcheck="false" autocomplete="off" aria-label="Segment end" title="End (e.g. 14 or 0:14.000), Enter to apply"><button class="nudge" data-edge="end" data-dir="1" title="End 0.05 s later (Shift: 0.25 s)" aria-label="End later">+</button></span>
+      <span class="dur" id="dDur" hidden></span>
+      <button class="btn" id="aPlay" title="Play this segment" hidden>${I.play}Play</button>
+      <button class="btn" id="aSplit" title="Split this segment at the playhead" hidden>${I.split}Split at playhead</button>
+      <button class="btn" id="aMerge" title="Join this segment with the next one" hidden>${I.merge}Merge with next</button>
+      <button class="btn danger" id="aDel" title="Delete this segment (Undo brings it back)" hidden>${I.del}Delete</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="icon" id="undo" title="Undo" aria-label="Undo">${I.undo}</button>
+      <button class="icon" id="redo" title="Redo" aria-label="Redo">${I.redo}</button>`;
+    const root = container.getRootNode();
+    const $ = (id) => root.getElementById(id);
+    const linksEl = $("links"); // moved around (see render), so kept by reference
+    const D = () => timeline.duration;
+    const base = () => store.segments.map((g) => ({ id: g.id, start: g.start, end: g.end }));
+    const sel = () => (store && store.selected ? store.byId(store.selected) : null);
+    const editable = () => !!(store && store.supported && !store.readOnly && !timeline.segmentsDisabled);
+    const setNote = (t, err = false) => {
+      $("dNote").textContent = t || "";
+      $("dNote").className = "note" + (err ? " err" : "");
+    };
+    let flashTimer;
+    let emptyText = EMPTY;
+    // Messages appear once, as the brief toast at the top (it fades by itself).
+    const flash = (t) => {
+      if (ui && ui.toast) ui.toast(t);
+    };
+    const refreshHistory = () =>
+      CL.page("history")
+        .then((h) => {
+          $("undo").disabled = !h.canUndo || !editable();
+          $("redo").disabled = !h.canRedo || !editable();
+        })
+        .catch(() => {});
+
+    // ---- Add segment: mark start, then mark end ----
+    // How "Add segment" works: mark start / end while playing, or draw with the mouse.
+    const MODE_KEY = "cinnamonLabel.addMode";
+    const addMode = () => (localStorage.getItem(MODE_KEY) === "draw" ? "draw" : "mark");
+    let drawArmed = false; // "Add segment" in draw mode: waiting for a drag on the waveform
+    const setArmed = (on) => {
+      drawArmed = !!on;
+      timeline.dt.classList.toggle("arm", drawArmed);
+    };
+    const menu = $("addMenu");
+    let tipTimer = 0;
+    const addTip = (text) => {
+      const tip = $("addTip");
+      clearTimeout(tipTimer);
+      tip.hidden = true;
+      void tip.offsetWidth; // replay the entrance on a repeat warning
+      tip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>';
+      tip.append(text);
+      tip.hidden = false;
+      tipTimer = setTimeout(() => (tip.hidden = true), 3200);
+    };
+    const showMenu = (on) => {
+      menu.hidden = !on;
+      if (on) $("addTip").hidden = true;
+      $("aMode").setAttribute("aria-expanded", String(!!on));
+      if (on) for (const b of menu.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.mode === addMode()));
+      if (on) menu.querySelector('[aria-checked="true"]').focus();
+    };
+    CL.on($("aMode"), "click", (e) => {
+      e.stopPropagation();
+      showMenu(menu.hidden);
+    });
+    for (const b of menu.querySelectorAll("button"))
+      CL.on(b, "click", () => {
+        localStorage.setItem(MODE_KEY, b.dataset.mode);
+        showMenu(false);
+        stopMarking();
+        $("aAdd").focus();
+      });
+    CL.on(menu, "keydown", (e) => {
+      const items = [...menu.querySelectorAll("button")];
+      const i = items.indexOf(root.activeElement);
+      if (e.key === "Escape") (showMenu(false), $("aMode").focus());
+      else if (e.key === "ArrowDown" || e.key === "ArrowUp") items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    // Close the menu on any click outside it.
+    CL.on(root, "pointerdown", (e) => {
+      if (!menu.hidden && !e.composedPath().some((n) => n === menu || n === $("aMode"))) showMenu(false);
+    });
+    timeline.onMoveHint = () => flash(`To move a segment, hold ${CL.MOVE_KEY} and drag it.`);
+    timeline.onCreated = () => {
+      if (!drawArmed) return;
+      setArmed(false);
+      focusNext = true; // like Mark end: straight to the new segment's form
+      api.render();
+    };
+
+    function stopMarking() {
+      marking = null;
+      timeline.marking = null;
+      setArmed(false);
+      timeline.invalidate();
+      api.render();
+    }
+    CL.on($("aAdd"), "click", async () => {
+      if (!editable()) return;
+      const t = player.v.currentTime || 0;
+      if (addMode() === "draw" && !marking) {
+        // Press again (or Esc / ✕) to stop waiting for the drag.
+        if (drawArmed) return stopMarking();
+        setArmed(true);
+        setNote("");
+        return api.render();
+      }
+      if (!marking) {
+        const inside = S.segmentAt(base(), t);
+        if (inside) {
+          const n = store.segments.findIndex((g) => g.id === inside.id) + 1;
+          return addTip(`The playhead is inside segment ${n}. Move it to an empty spot first.`);
+        }
+        marking = { start: t };
+        timeline.marking = marking;
+        timeline.invalidate();
+        setNote("");
+        return api.render();
+      }
+      const r = S.create(base(), marking.start, t, D());
+      if (!r || t <= marking.start + S.MIN_DUR) return; // Mark end is disabled until then
+      stopMarking();
+      focusNext = true;
+      await store.apply(r.plan, { select: "created" });
+    });
+    CL.on($("aCancel"), "click", stopMarking);
+    // While marking, "Mark end" is enabled only once the playhead is past the start.
+    function paintMarkEnd() {
+      const t = player.v.currentTime || 0;
+      if (marking) $("aAdd").disabled = !editable() || t <= marking.start + S.MIN_DUR;
+      // "Split at playhead" only when the playhead is inside the selected segment (not at its edges).
+      const g = sel();
+      if (g) $("aSplit").disabled = !editable() || !S.split(base(), g.id, t, splitGapMs() / 1000);
+    }
+    for (const ev of ["timeupdate", "seeked"]) CL.on(player.v, ev, paintMarkEnd);
+
+    // ---- mini waveform at the bottom of each card's header ----
+    // The segment's own waveform in light gray; while the playhead is inside the segment, the part
+    // already played fills in (amber while reviewing, cinnamon for the selected segment) up to a
+    // small playhead. Redrawn only when something it shows has changed.
+    const MINI = { waveInk: "#9aa1ad", played: "#d9931f", playedSel: "#8a4b2a", mid: "#eceef2" };
+    function drawMini(c, g, t) {
+      const cv = c.mini;
+      if (!cv || !cv.isConnected || cv.clientWidth < 4) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.round(cv.clientWidth * dpr);
+      const h = Math.round(cv.clientHeight * dpr);
+      const dur = g.end - g.start;
+      const inside = t >= g.start && t < g.end && dur > 0;
+      const isSel = store && store.selected === g.id;
+      const px = inside ? Math.round(((t - g.start) / dur) * w) : -1;
+      const sig = [w, h, g.start, g.end, timeline.audioVersion, px, isSel].join("|");
+      if (cv.dataset.sig === sig) return;
+      cv.dataset.sig = sig;
+      if (cv.width !== w || cv.height !== h) {
+        cv.width = w;
+        cv.height = h;
+      }
+      const ctx = cv.getContext("2d");
+      ctx.clearRect(0, 0, w, h);
+      const mid = h / 2;
+      ctx.fillStyle = MINI.mid;
+      ctx.fillRect(0, Math.round(mid), w, dpr);
+      const gain = timeline.peakGain;
+      const step = 2 * dpr; // a bar every 2 px: a quiet, minimized look
+      const bar = Math.max(1, Math.round(dpr * 1.2));
+      const played = isSel ? MINI.playedSel : MINI.played;
+      for (let x = 0; x < w; x += step) {
+        const r = timeline.peaks(g.start + (x / w) * dur, g.start + ((x + step) / w) * dur);
+        if (!r) continue;
+        const a = Math.min(1, Math.max(r[1], -r[0]) * gain);
+        const bh = Math.max(dpr, a * (h - 2 * dpr));
+        // Light to dark with the signal: quiet parts fade, speech stands out.
+        ctx.globalAlpha = 0.3 + 0.7 * Math.sqrt(a);
+        ctx.fillStyle = x < px ? played : MINI.waveInk;
+        ctx.fillRect(x, mid - bh / 2, bar, bh);
+      }
+      ctx.globalAlpha = 1;
+      if (inside) {
+        ctx.fillStyle = played;
+        ctx.fillRect(Math.max(0, px - dpr), 0, 2 * dpr, h);
+      }
+    }
+    function drawMinis() {
+      if (!store) return;
+      const t = player.v.currentTime || 0;
+      for (const g of store.segments) {
+        const c = cards.get(g.id);
+        if (c) drawMini(c, g, t);
+      }
+    }
+    // While playing: keep the moving bar smooth (only the card under the playhead changes).
+    let miniRaf = 0;
+    const miniTick = () => {
+      miniRaf = 0;
+      if (!store) return;
+      const t = player.v.currentTime || 0;
+      for (const g of store.segments) {
+        const c = cards.get(g.id);
+        if (c && (c.mini.dataset.sig || "").split("|")[5] !== "-1") drawMini(c, g, t); // was inside: clear it
+        else if (c && t >= g.start && t < g.end) drawMini(c, g, t);
+      }
+      // The playing card's glow follows the loudness at the playhead (smoothed).
+      const pc = container.querySelector(".card.passing");
+      if (pc && !player.v.paused && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const r = timeline.peaks(Math.max(0, t - 0.06), t + 0.06);
+        const target = r ? Math.min(1, Math.sqrt(Math.max(r[1], -r[0]) * timeline.peakGain)) : 0;
+        glowLvl += (target - glowLvl) * 0.18;
+        pc.style.setProperty("--lvl", glowLvl.toFixed(3));
+      }
+      if (!player.v.paused) miniRaf = requestAnimationFrame(miniTick);
+    };
+    let glowLvl = 0;
+    for (const ev of ["play", "seeked", "timeupdate"]) CL.on(player.v, ev, () => miniRaf || (miniRaf = requestAnimationFrame(miniTick)));
+    // As the audio decodes, the mini waveforms fill in.
+    setInterval(() => {
+      if (store && timeline.audioVersion !== drawMinis._v) {
+        drawMinis._v = timeline.audioVersion;
+        drawMinis();
+      }
+    }, 1000);
+
+    // Reviewing: playing with no segment selected lights the card of the segment being played
+    // (the waveform does the same), and keeps it in view.
+    let passingId = null;
+    const paintPassing = () => {
+      const v = player.v;
+      const t = v.currentTime || 0;
+      const g = !store || store.selected || v.paused ? null : store.segments.find((x) => x.start <= t && t < x.end);
+      const id = g ? g.id : null;
+      if (id === passingId) return;
+      passingId = id;
+      container.querySelectorAll(".card.passing").forEach((c) => c.classList.remove("passing"));
+      if (id) {
+        const card = [...container.querySelectorAll(".card")].find((c) => c.dataset.id === String(id));
+        if (card) {
+          card.classList.add("passing");
+          card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      }
+      timeline.invalidate(); // clears the lit block on the waveform too when playback stops
+    };
+    for (const ev of ["timeupdate", "play", "pause", "seeked"]) CL.on(player.v, ev, paintPassing);
+    CL.on($("aUnsel"), "click", () => store && store.select(null));
+
+    // ---- cards: the play button plays (or pauses) just that segment, without opening it ----
+    // The segment being replayed (by id, so editing its times doesn't lose it).
+    let rangeSeg = null;
+    const playSeg = (g, opts) => {
+      rangeSeg = g.id;
+      player.playRange(g.start, g.end, opts);
+    };
+    const playingId = () => {
+      const r = player._range;
+      if (!r || player.v.paused || !rangeSeg || !store || !store.byId(rangeSeg)) return null;
+      return rangeSeg;
+    };
+    // Its times changed while it plays (edge drag, − / +, typed time, move): play the new range.
+    const syncRange = () => {
+      const r = player._range;
+      if (!r || !rangeSeg || !store) return;
+      const g = store.byId(rangeSeg);
+      if (!g) {
+        // Deleted or merged away while it played: stop, rather than loop over a range that's gone.
+        rangeSeg = null;
+        player._range = null;
+        player.setLoop(false);
+        player.v.pause();
+        return;
+      }
+      if (Math.abs(g.start - r[0]) < 1e-6 && Math.abs(g.end - r[1]) < 1e-6) return;
+      r[0] = g.start;
+      r[1] = g.end;
+      const t = player.v.currentTime || 0;
+      if (t < g.start || t >= g.end) player.seekTo(g.start); // the playhead fell outside: start over
+    };
+    const paintPlay = () => {
+      const on = playingId();
+      for (const [id, c] of cards) {
+        const isOn = id === on;
+        c.play.classList.toggle("on", isOn);
+        c.play.firstChild.innerHTML = isOn ? I.pauseSmall : I.playSmall;
+        c.play.title = isOn ? "Pause" : "Play this segment";
+        c.play.setAttribute("aria-label", c.play.title);
+        // Looping is always shown on its card, open or collapsed, so it is never a mystery.
+        c.lp.hidden = !(isOn && player._loop);
+      }
+    };
+    for (const ev of ["play", "pause", "ended", "seeking"]) CL.on(player.v, ev, () => setTimeout(paintPlay, 0));
+    CL.on($("cards"), "click", (e) => {
+      const pb = e.target.closest(".cplay");
+      if (!pb) return;
+      const id = pb.parentElement.dataset.id;
+      const g = store && store.byId(id);
+      if (!g) return;
+      if (playingId() === id) player.v.pause();
+      else playSeg(g, { loop: loopOn() }); // repeats while Loop is on, like Replay segment
+    });
+
+    // ---- cards: click a header to open (or close) that segment ----
+    CL.on($("cards"), "click", (e) => {
+      const head = e.target.closest(".ch");
+      if (!head) return;
+      const id = head.parentElement.dataset.id;
+      if (store.selected === id) {
+        store.select(null); // close
+        return;
+      }
+      focusNext = true; // put the cursor in the transcript once this segment's form is shown
+      setNote("");
+      store.select(id);
+      const g = store.byId(id);
+      if (g) {
+        player.seekTo(g.start);
+        timeline.revealSegment(g);
+      }
+    });
+
+    // ---- nudge an edge by the nudge step (Shift: the larger step); only this segment changes ----
+    CL.on(bar, "click", async (e) => {
+      const b = e.target.closest(".nudge");
+      if (!b || !editable()) return;
+      const g = sel();
+      if (!g) return;
+      const step = ((e.shiftKey ? nudgeShiftMs() : nudgeMs()) * Number(b.dataset.dir)) / 1000;
+      const plan = S.moveEdge(base(), g.id, b.dataset.edge, g[b.dataset.edge] + step, D());
+      if (!plan || !plan.update.length) return; // the button is disabled in this case anyway
+      await store.apply(plan, { select: g.id });
+    });
+
+    // ---- start / end fields ----
+    for (const [id, which] of [["dStart", "start"], ["dEnd", "end"]]) {
+      const input = $(id);
+      const commit = async () => {
+        const g = sel();
+        if (!g) return;
+        const v = U.parseDuration(input.value);
+        if (v == null) {
+          input.value = fmtMs(g[which]);
+          return flash("Type a time like 12.5 or 0:12.500.", true);
+        }
+        const plan = S.setTimes(base(), g.id, which === "start" ? v : g.start, which === "end" ? v : g.end, D());
+        if (!plan) {
+          input.value = fmtMs(g[which]);
+          return flash("That would make the segment empty or overlap another one.", true);
+        }
+        await store.apply(plan, { select: g.id });
+      };
+      CL.on(input, "change", commit);
+      CL.onFieldKey(input, (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.blur(); // fires "change"
+        } else if (e.key === "Escape") {
+          const g = sel();
+          if (g) input.value = fmtMs(g[which]);
+          input.blur();
+        }
+      });
+    }
+
+    // ---- actions ----
+    // Replay: once, or over and over while Loop is on (remembered in this browser).
+    const LOOP_KEY = "cinnamonLabel.loop";
+    const loopOn = () => {
+      try {
+        return localStorage.getItem(LOOP_KEY) === "1";
+      } catch (_) {
+        return false;
+      }
+    };
+    const setLoop = (on) => {
+      try {
+        localStorage.setItem(LOOP_KEY, on ? "1" : "0");
+      } catch (_) {}
+      player.setLoop(on); // applies to a replay already playing
+      paintPlay();
+    };
+    const play = () => {
+      const g = sel();
+      if (g) playSeg(g, { loop: loopOn() });
+    };
+    CL.on($("aPlay"), "click", play);
+    CL.on($("aSplit"), "click", async () => {
+      const g = sel();
+      if (!g) return;
+      const t = player.v.currentTime || 0;
+      if (t <= g.start || t >= g.end) return flash("Move the playhead inside this segment first.", true);
+      const plan = S.split(base(), g.id, t, splitGapMs() / 1000);
+      if (!plan) return flash("Too close to the segment's edge to split.", true);
+      await store.apply(plan, { select: g.id }); // the new segment starts with no answers
+      flash("Split. The new segment starts with no answers.");
+    });
+    CL.on($("aMerge"), "click", async () => {
+      const g = sel();
+      if (!g) return;
+      const r = S.mergeNext(base(), g.id);
+      if (!r) return flash("There is no next segment to merge with.", true);
+      const next = store.byId(r.removedId);
+      r.plan.fields = [];
+      for (const name of textFields()) {
+        const a = [].concat(g.fields[name] || []).join("").trim();
+        const b = [].concat((next && next.fields[name]) || []).join("").trim();
+        if (b) r.plan.fields.push({ id: g.id, name, value: a ? `${a} ${b}` : b });
+      }
+      await store.apply(r.plan, { select: g.id });
+      flash("Merged; transcripts joined.");
+    });
+    CL.on($("aDel"), "click", async () => {
+      const g = sel();
+      if (!g) return;
+      const n = store.segments.findIndex((x) => x.id === g.id) + 1;
+      await store.apply(S.remove(base(), g.id));
+      flash(`Segment ${n} deleted. Undo brings it back.`);
+    });
+    CL.on($("undo"), "click", async () => {
+      await store.flush();
+      await CL.page("undo");
+      await store.refresh();
+      refreshHistory();
+    });
+    CL.on($("redo"), "click", async () => {
+      await CL.page("redo");
+      await store.refresh();
+      refreshHistory();
+    });
+
+    // ---- backup offer ----
+    let backup = null;
+    const when = (ts) => new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    CL.on($("rDo"), "click", async () => {
+      if (!backup) return;
+      $("rDo").disabled = true;
+      const r = await backup.restore();
+      $("rDo").disabled = false;
+      if (store) await store.refresh();
+      flash(r.message, !r.ok);
+    });
+    let discardArmed = 0;
+    CL.on($("rNo"), "click", async () => {
+      if (!backup) return;
+      if (Date.now() - discardArmed > 4000) {
+        discardArmed = Date.now();
+        $("rNo").textContent = "Click again to delete the backup";
+        setTimeout(() => ($("rNo").textContent = "Discard"), 4000);
+        return;
+      }
+      discardArmed = 0;
+      $("rNo").textContent = "Discard";
+      await backup.discard();
+    });
+
+    // ---- forms ----
+    const values = (g) => ({ ...((store && store.taskFields) || {}), ...((g && g.fields) || {}) });
+    const segmentsHidden = () => !!(form && store && !CFG.isVisible({ when: form.segmentLabelsWhen }, store.taskFields || {}));
+    const missingFor = (g) => (form ? CFG.missing(form.segment, values(g)) : []);
+    // The dialects named in this project's form, in order (main question first, then alternatives).
+    let dialectList = null;
+    let dialectFor = null;
+    const dialectOrder = () => {
+      if (dialectFor !== form) {
+        dialectFor = form;
+        dialectList = [];
+        for (const it of (form && form.segment) || [])
+          if (it.kind === "choices" && /dialect/i.test(it.name || "")) for (const o of it.options) if (!dialectList.includes(String(o.value))) dialectList.push(String(o.value));
+      }
+      return dialectList;
+    };
+    // Collapsed-card summary: the visible choice answers (one tag each, the question as tooltip),
+    // and the transcript's first line.
+    function summary(g) {
+      if (!form) return { tags: [], pv: "" };
+      const v = values(g);
+      const parts = [];
+      let pv = "";
+      for (const it of form.segment) {
+        if (!CFG.isVisible(it, v)) continue;
+        const ans = [].concat(v[it.name] || []).filter(Boolean);
+        const q = CFG.labelFor(form.segment, it) || it.name;
+        if (it.kind === "choices" && ans.length && !(it.multiple && it.options.length === 1)) for (const a of ans) parts.push({ text: a, q, name: it.name });
+        if (it.kind === "choices" && it.multiple && it.options.length === 1 && ans.length) parts.unshift({ text: it.options[0].label, q, name: it.name });
+        if (it.kind === "textarea" && !pv && (it.rows >= 3 || it.dir === "rtl") && ans.length) pv = ans.join("\n");
+      }
+      return { tags: parts, pv };
+    }
+    function goNext() {
+      const g = sel();
+      if (!g) return;
+      const nx = S.neighbour(store.segments, g.id, 1);
+      if (!nx) return flash("This is the last segment.");
+      store.flushTexts();
+      focusNext = true;
+      store.select(nx.id);
+      timeline.revealSegment(nx);
+      // Play it right away: this replaces the previous replay (and its loop); it loops too if Loop is on.
+      playSeg(nx, { loop: loopOn() });
+    }
+
+    // ---- cards: created once per segment id, updated in place (never rebuilt under the cursor) ----
+    const cards = new Map(); // id -> { root, n, t, pill, sub, pv, body }
+    function card(id) {
+      let c = cards.get(id);
+      if (c) return c;
+      const rootEl = document.createElement("article");
+      rootEl.className = "card";
+      rootEl.dataset.id = id;
+      rootEl.setAttribute("role", "listitem");
+      rootEl.innerHTML = `<button class="cplay" title="Play this segment"><span>${I.playSmall}</span></button><button class="ch" aria-expanded="false"><span class="n"></span><span class="t"></span><span class="lp" hidden title="This segment is looping. Click to stop.">↻ Looping</span><span class="pill"></span><span class="chev">${I.chev}</span><span class="sub"></span><span class="pv"></span><canvas class="mini" aria-hidden="true"></canvas></button><div class="cbody"></div>`;
+      const q = (s) => rootEl.querySelector(s);
+      c = { root: rootEl, play: q(".cplay"), head: q(".ch"), n: q(".n"), t: q(".t"), pill: q(".pill"), lp: q(".lp"), sub: q(".sub"), pv: q(".pv"), mini: q(".mini"), body: q(".cbody") };
+      // "Looping" badge: stops the loop, without opening or closing the card.
+      c.lp.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        player.v.pause();
+      });
+      cards.set(id, c);
+      return c;
+    }
+    let lastOpen = null;
+
+    // ---- render ----
+    const api = {
+      setUi(u) {
+        ui = u;
+      },
+      // Esc outside text fields: cancel "Add segment". Returns true if something was cancelled.
+      cancelMarking() {
+        if (!menu.hidden) return showMenu(false), true;
+        if (!marking && !drawArmed) return false;
+        stopMarking();
+        return true;
+      },
+      setForm(f) {
+        form = f;
+        const links = linksEl;
+        links.textContent = "";
+        for (const l of (f && f.links) || []) {
+          const a = document.createElement("a");
+          a.href = l.href;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = l.text;
+          links.appendChild(a);
+        }
+        links.hidden = !links.children.length;
+        const taskFields = (f && f.task.filter((i) => i.kind === "choices" || i.kind === "textarea")) || [];
+        $("whole").hidden = !links.children.length && !taskFields.length;
+        taskView = f && f.task.length ? new CL.FormView($("taskForm"), { items: f.task, onChange: (name, v, o) => store && store.setField(null, name, v, o) }) : null;
+        // The project's own instruction goes on its own line, below ours.
+        $("segEmptyHelp").textContent = ((f && f.segmentHelp) || []).join(" ");
+        segView = f
+          ? new CL.FormView($("form"), {
+              items: f.segment,
+              onChange: (name, v, o) => store && store.selected && store.setField(store.selected, name, v, o),
+              extras: { onReplay: play, loop: { get: loopOn, set: setLoop }, onNext: goNext, onBlur: () => store && store.flushTexts() },
+            })
+          : null;
+        api.render();
+      },
+      setStore(s) {
+        store = s;
+        marking = null;
+        timeline.marking = null;
+        setNote("");
+        $("holder").appendChild($("detail"));
+        for (const c of cards.values()) c.root.remove();
+        cards.clear();
+        lastOpen = null;
+        api.render();
+      },
+      setBackup(b) {
+        backup = b;
+        api.showOffer(b ? b.offer : null);
+      },
+      showOffer(b) {
+        $("restore").hidden = !b;
+        if (b) {
+          const n = b.segments;
+          $("rTxt").textContent = `This browser has unsubmitted work for this task from ${when(b.savedAt)}: ${n} segment${n === 1 ? "" : "s"}. Restore it?`;
+        }
+      },
+      render() {
+        const has = !!store && store.supported;
+        const segs = has ? store.segments : [];
+        const canEdit = editable();
+        $("segCount").textContent = segs.length ? `(${segs.length})` : "";
+        $("readOnly").hidden = !(store && store.readOnly);
+        $("segEmpty").hidden = segs.length > 0;
+        const hiddenSegs = segmentsHidden();
+        $("skipNote").hidden = !hiddenSegs;
+        timeline.segmentsDisabled = hiddenSegs;
+        const g = sel();
+
+        // cards, in time order; open = the selected segment
+        const list = $("cards");
+        const miss = segs.map((x) => missingFor(x));
+        $("segSum").textContent = form && segs.length ? `${miss.filter((m) => !m.length).length} of ${segs.length} complete` : "";
+        const live = new Set();
+        segs.forEach((x, i) => {
+          const c = card(x.id);
+          live.add(x.id);
+          if (list.children[i] !== c.root) list.insertBefore(c.root, list.children[i] || null);
+          c.n.textContent = String(i + 1);
+          c.t.innerHTML = "";
+          c.t.append(`${U.fmtClock(x.start)} – ${U.fmtClock(x.end)}`);
+          const d = document.createElement("span");
+          d.textContent = fmtDur(x.end - x.start);
+          c.t.append(d);
+          c.pill.hidden = !form;
+          c.pill.className = "pill " + (miss[i].length ? "need" : "ok");
+          c.pill.textContent = miss[i].length ? `${miss[i].length} still needed` : "✓ Complete";
+          c.pill.title = miss[i].length ? "Still needed: " + miss[i].join(", ") : "Every required answer is given.";
+          const sm = summary(x);
+          const skipped = sm.tags.some((x) => /^skip\b/i.test(String(x.text).trim()));
+          const sig = sm.tags.map((x) => x.q + "=" + x.text).join("|");
+          if (c.sub.dataset.sig !== sig) {
+            c.sub.dataset.sig = sig;
+            let alsoShown = false;
+            let prevGroup = null;
+            c.sub.replaceChildren(
+              ...sm.tags.flatMap((x) => {
+                // A thin line between answers to different questions (the dialect alternatives
+                // belong with the main dialect).
+                const group = String(x.name || x.q).replace(/_alt(_\d+)?$/i, "");
+                const sep = prevGroup !== null && group !== prevGroup;
+                prevGroup = group;
+                const lead = [];
+                if (sep) {
+                  const bar = document.createElement("span");
+                  bar.className = "qsep";
+                  bar.setAttribute("aria-hidden", "true");
+                  lead.push(bar);
+                }
+                const tag = document.createElement("span");
+                tag.className = "tag";
+                // Speaker gender matters most: its own colour, whatever the project calls it.
+                const k = String(x.text).trim().toLowerCase();
+                if (/^(male|man|ذكر)$/.test(k)) tag.dataset.k = "m";
+                else if (/^(female|woman|أنثى|انثى)$/.test(k)) tag.dataset.k = "f";
+                else if (/^skip\b/.test(k)) tag.dataset.k = "skip";
+                else if (/dialect/i.test(x.name || "")) {
+                  // Each dialect keeps one colour (its place in the project's list); alternatives are outlined.
+                  const i = dialectOrder().indexOf(String(x.text));
+                  tag.dataset.d = String((i < 0 ? 0 : i) % 8);
+                  if (/_alt/i.test(x.name)) tag.dataset.alt = "1";
+                }
+                tag.textContent = x.text;
+                tag.title = x.q;
+                // The alternatives read as "also …", after the main dialect.
+                if (tag.dataset.alt && !alsoShown) {
+                  alsoShown = true;
+                  const also = document.createElement("span");
+                  also.className = "also";
+                  also.textContent = "also";
+                  return [...lead, also, tag];
+                }
+                return [...lead, tag];
+              })
+            );
+          }
+          c.sub.hidden = !sm.tags.length;
+          // Answered with a "Skip…" option: grayed a little, so the segments that count stand out.
+          c.root.classList.toggle("skipped", skipped);
+          c.pv.textContent = sm.pv || (skipped ? "No transcription" : "No transcription yet");
+          c.pv.classList.toggle("none", !sm.pv);
+          c.pv.hidden = !form;
+          const open = !!g && g.id === x.id;
+          c.root.classList.toggle("open", open);
+          c.head.setAttribute("aria-expanded", String(open));
+        });
+        for (const [id, c] of cards) {
+          if (live.has(id)) continue;
+          if (c.body.contains($("detail"))) $("holder").appendChild($("detail"));
+          c.root.remove();
+          cards.delete(id);
+        }
+
+        drawMinis();
+        // The replayed segment was open and has just been closed (or another opened): end its
+        // replay/loop and let the video play on. Next segment starts its own replay right after.
+        if (rangeSeg && lastOpen === rangeSeg && (!g || g.id !== rangeSeg)) {
+          rangeSeg = null;
+          player._range = null;
+          player.setLoop(false);
+        }
+        syncRange();
+
+        // the open card holds the form
+        if (g) {
+          const c = cards.get(g.id);
+          if (c && $("detail").parentElement !== c.body) c.body.appendChild($("detail"));
+          if (segView) segView.render(g.id, values(g), { readOnly: !canEdit });
+          if (c && lastOpen !== g.id) c.root.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+          if (focusNext) {
+            focusNext = false;
+            const tx = segView && segView.firstBigText();
+            if (tx && canEdit) tx.focus({ preventScroll: true });
+          }
+        } else if ($("detail").parentElement !== $("holder")) $("holder").appendChild($("detail"));
+        lastOpen = g ? g.id : null;
+
+        // toolbar
+        const i = g ? segs.findIndex((x) => x.id === g.id) : -1;
+        $("aAdd").disabled = !canEdit;
+        const armed = !!marking || drawArmed;
+        const draw = addMode() === "draw";
+        $("aAdd").classList.toggle("marking", !!marking);
+        $("aAdd").classList.toggle("arming", drawArmed);
+        $("aAdd").classList.toggle("primary", !armed);
+        $("aAdd").querySelector("span").textContent = marking ? "Mark end" : drawArmed ? "Drawing…" : draw ? "Draw segment" : "Mark segment";
+        $("aAdd").title = marking
+          ? `Started at ${U.fmtClock(marking.start)}. Press where the speech ends.`
+          : drawArmed
+            ? "Drag across the waveform to draw the segment. Press again or Esc to stop."
+            : draw
+              ? "Then drag across the waveform to draw the segment"
+              : "Start a segment at the playhead; press again to end it";
+        $("aMode").hidden = armed;
+        $("aMode").disabled = !canEdit;
+        if (armed) $("aAdd").dataset.solo = "";
+        else delete $("aAdd").dataset.solo;
+        if (armed && !menu.hidden) showMenu(false);
+        $("aCancel").hidden = !armed;
+        for (const id of ["bWho", "gStart", "bDash", "gEnd", "dDur", "aPlay", "aSplit", "aMerge", "aDel"]) $(id).hidden = !g || armed;
+        $("bHint").hidden = !!g && !armed;
+        $("bHint").textContent = drawArmed ? "Drag across an empty part of the waveform." : marking ? "" : canEdit ? "Select a segment to edit it." : "";
+        paintMarkEnd();
+        if (g) {
+          $("bWhoTxt").textContent = `Segment ${i + 1}`;
+          if (root.activeElement !== $("dStart")) $("dStart").value = fmtMs(g.start);
+          if (root.activeElement !== $("dEnd")) $("dEnd").value = fmtMs(g.end);
+          $("dDur").textContent = fmtDur(g.end - g.start);
+          for (const id of ["dStart", "dEnd"]) $(id).disabled = !canEdit;
+          const ms = nudgeMs();
+          const fmtStep = (v) => (v >= 1000 ? `${v / 1000} s` : `${v} ms`);
+          const b0 = base();
+          bar.querySelectorAll(".nudge").forEach((n) => {
+            // Disabled when that edge can't move any further that way (neighbour, video end, minimum length).
+            const p = canEdit ? S.moveEdge(b0, g.id, n.dataset.edge, g[n.dataset.edge] + (Number(n.dataset.dir) * ms) / 1000, D()) : null;
+            n.disabled = !p || !p.update.length;
+            const which = n.dataset.edge === "start" ? "Start" : "End";
+            n.title = `${which} ${fmtStep(ms)} ${n.dataset.dir < 0 ? "earlier" : "later"}. Hold Shift: ${fmtStep(nudgeShiftMs())}.`;
+          });
+          $("aDel").disabled = !canEdit;
+          $("aMerge").disabled = !canEdit || i === segs.length - 1;
+        }
+
+        if (taskView) {
+          taskView.render("task", values(null), { readOnly: !store || store.readOnly });
+          // One tidy row: guide links on the left, the first whole-video switch on the right.
+          // The form can rebuild (e.g. while switching tasks), so the links element is kept by
+          // reference and re-attached; without a switch row it sits on its own at the top.
+          const lead = $("taskForm").querySelector(".rows > .grp:first-child > .tg:first-child");
+          if (lead) {
+            lead.classList.add("lead");
+            if (linksEl.parentElement !== lead) lead.prepend(linksEl);
+          } else if (linksEl.parentElement !== $("whole")) $("whole").prepend(linksEl);
+        }
+        refreshHistory();
+      },
+    };
+    return api;
+  };
+})();

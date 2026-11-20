@@ -56,6 +56,18 @@
     return h ? `${h}:${String(m).padStart(2, "0")}:${ss}.${t}` : `${m}:${ss}.${t}`;
   };
 
+  // "8", "8.5", "8 s", "8s", "1:30", "1:30.5", "1:02:03" -> seconds; anything else -> null.
+  U.parseDuration = function parseDuration(text) {
+    const s = String(text == null ? "" : text).trim().toLowerCase().replace(/\s*(s|sec|secs|seconds?)$/, "").replace(",", ".");
+    if (!s) return null;
+    if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+    const m = /^(?:(\d+):)?(\d+):(\d{1,2}(?:\.\d+)?)$/.exec(s);
+    if (!m) return null;
+    const sec = Number(m[3]);
+    if (sec >= 60) return null;
+    return (Number(m[1] || 0) * 60 + Number(m[2])) * 60 + sec;
+  };
+
   U.fmtEta = function fmtEta(sec) {
     if (!Number.isFinite(sec) || sec < 0) return "";
     if (sec < 10) return "a few seconds left";

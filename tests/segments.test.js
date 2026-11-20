@@ -1,0 +1,133 @@
+// Run with: node --test tests/*.test.js
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const S = require("../extension/src/shared/segments.js");
+
+const D = 100;
+const segs = () => [
+  { id: "a", start: 10, end: 20 },
+  { id: "b", start: 20, end: 30 }, // touches a
+  { id: "c", start: 40, end: 50 },
+];
+const ok = (list) => assert.deepEqual(S.validate(list, D), []);
+
+test("create clips to the gap where the drag started, in either direction", () => {
+  const r = S.create(segs(), 35, 45, D); // starts in the gap 30..40
+  assert.deepEqual(r.segment, { start: 35, end: 40 });
+  const r2 = S.create(segs(), 38, 31, D); // right-to-left drag
+  assert.deepEqual(r2.segment, { start: 31, end: 38 });
+  assert.equal(S.create(segs(), 15, 18, D), null, "inside a segment: nothing");
+  assert.equal(S.create(segs(), 30.02, 30.05, D), null, "too short");
+  ok(S.apply(segs(), r.plan));
+});
+
+test("moveEdge moves only its own segment, never a touching neighbour", () => {
+  // Stops at the touching neighbour instead of pushing it.
+  assert.deepEqual(S.moveEdge(segs(), "a", "end", 25, D).update, []);
+  const shrink = S.apply(segs(), S.moveEdge(segs(), "b", "start", 23, D));
+  assert.deepEqual(shrink.map((g) => [g.id, g.start, g.end]), [["a", 10, 20], ["b", 23, 30], ["c", 40, 50]]);
+  const grow = S.apply(segs(), S.moveEdge(segs(), "b", "end", 38, D));
+  assert.deepEqual(grow.map((g) => [g.id, g.start, g.end]), [["a", 10, 20], ["b", 20, 38], ["c", 40, 50]]);
+  ok(grow);
+});
+
+test("moveEdge never crosses a non-touching neighbour or the video bounds", () => {
+  ok(S.apply(segs(), S.moveEdge(segs(), "c", "start", 5, D))); // stops at b's end (30)
+  assert.equal(S.apply(segs(), S.moveEdge(segs(), "c", "start", 5, D)).find((g) => g.id === "c").start, 30);
+  assert.equal(S.apply(segs(), S.moveEdge(segs(), "c", "end", 500, D)).find((g) => g.id === "c").end, D);
+  assert.equal(S.apply(segs(), S.moveEdge(segs(), "a", "start", -5, D)).find((g) => g.id === "a").start, 0);
+  assert.equal(S.apply(segs(), S.moveEdge(segs(), "c", "end", 0, D)).find((g) => g.id === "c").end, 40 + S.MIN_DUR);
+});
+
+test("split, merge, remove, setTimes", () => {
+  const sp = S.split(segs(), "c", 44.5);
+  ok(S.apply(segs(), sp));
+  assert.deepEqual(S.apply(segs(), sp).map((g) => [g.start, g.end]).slice(2), [[40, 44.5], [44.5, 50]]);
+  assert.equal(S.split(segs(), "c", 40.05), null, "too close to the edge");
+
+  const m = S.mergeNext(segs(), "a");
+  assert.equal(m.removedId, "b");
+  assert.deepEqual(S.apply(segs(), m.plan).map((g) => [g.id, g.start, g.end]), [["a", 10, 30], ["c", 40, 50]]);
+  assert.equal(S.mergeNext(segs(), "c"), null, "nothing after the last segment");
+
+  assert.deepEqual(S.apply(segs(), S.remove(segs(), "b")).map((g) => g.id), ["a", "c"]);
+
+  const st = S.setTimes(segs(), "c", 25, 60, D); // clamped to [30, 100]
+  assert.deepEqual(S.apply(segs(), st).find((g) => g.id === "c"), { id: "c", start: 30, end: 60 });
+  assert.equal(S.setTimes(segs(), "c", 45, 45.05, D), null);
+});
+
+// Random sequences of operations must never break the invariants.
+test("thousands of random edits keep segments valid", () => {
+  let seed = 42;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  let list = [];
+  let n = 0;
+  for (let step = 0; step < 5000; step++) {
+    const t = rnd() * D;
+    const pick = list[Math.floor(rnd() * list.length)];
+    const op = Math.floor(rnd() * 6);
+    let plan = null;
+    if (op === 0) plan = S.create(list, t, t + (rnd() - 0.3) * 20, D)?.plan;
+    else if (pick && op === 1) plan = S.moveEdge(list, pick.id, rnd() < 0.5 ? "start" : "end", t, D);
+    else if (pick && op === 2) plan = S.split(list, pick.id, pick.start + rnd() * (pick.end - pick.start));
+    else if (pick && op === 3) plan = S.mergeNext(list, pick.id)?.plan;
+    else if (pick && op === 4) plan = S.remove(list, pick.id);
+    else if (pick && op === 5) plan = S.setTimes(list, pick.id, t - 5, t + rnd() * 10, D);
+    if (!plan) continue;
+    list = S.apply(list, plan, plan.create.map(() => `s${n++}`));
+    const errs = S.validate(list, D);
+    assert.deepEqual(errs, [], `step ${step}, op ${op}`);
+  }
+  assert.ok(n > 100, "the test actually created segments");
+});
+
+test("shift slides a segment and stops at neighbours", () => {
+  const base = [
+    { id: "a", start: 0, end: 10 },
+    { id: "b", start: 20, end: 30 },
+    { id: "c", start: 40, end: 50 },
+  ];
+  const D = 60;
+  assert.deepEqual(S.shift(base, "b", 3, D).update, [{ id: "b", start: 23, end: 33 }]);
+  assert.deepEqual(S.shift(base, "b", 100, D).update, [{ id: "b", start: 30, end: 40 }]); // stops at c
+  assert.deepEqual(S.shift(base, "b", -100, D).update, [{ id: "b", start: 10, end: 20 }]); // stops at a
+  assert.deepEqual(S.shift(base, "c", 100, D).update, [{ id: "c", start: 50, end: 60 }]); // video end
+  assert.deepEqual(S.shift(base, "a", -5, D), null); // already at 0
+  const tight = [
+    { id: "x", start: 0, end: 5 },
+    { id: "y", start: 5, end: 8 },
+    { id: "z", start: 8, end: 12 },
+  ];
+  assert.equal(S.shift(tight, "y", 1, D), null); // touching both sides: no room
+  for (const k of [-7, -2, 0.5, 4, 25]) {
+    const r = S.shift(base, "b", k, D);
+    if (r) assert.deepEqual(S.validate(S.apply(base, r), D), []);
+  }
+});
+
+test("shift stops exactly at neighbours whose edges are not ms-aligned", () => {
+  const base = [
+    { id: "a", start: 0, end: 5.0004 },
+    { id: "b", start: 6, end: 8 },
+    { id: "c", start: 9.0006, end: 12 },
+  ];
+  const left = S.shift(base, "b", -10, 20);
+  assert.ok(left);
+  assert.deepEqual(S.validate(S.apply(base, left), 20), []);
+  assert.ok(Math.abs(left.update[0].start - 5.0004) < 1e-9);
+  const right = S.shift(base, "b", 10, 20);
+  assert.ok(right);
+  assert.deepEqual(S.validate(S.apply(base, right), 20), []);
+  assert.ok(Math.abs(right.update[0].end - 9.0006) < 1e-9);
+});
+
+test("split leaves a gap centred on the playhead", () => {
+  const base = [{ id: "a", start: 10, end: 20 }];
+  const p = S.split(base, "a", 15, 0.1);
+  assert.deepEqual(p.update, [{ id: "a", start: 10, end: 14.95 }]);
+  assert.deepEqual(p.create, [{ start: 15.05, end: 20 }]);
+  assert.deepEqual(S.validate(S.apply(base, p), 30), []);
+  assert.equal(S.split(base, "a", 10.1, 0.1), null); // first part would be too short
+  assert.deepEqual(S.split(base, "a", 15).create, [{ start: 15, end: 20 }]); // no gap
+});

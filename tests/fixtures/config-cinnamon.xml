@@ -1,0 +1,89 @@
+<View>
+  <!-- Mirrors the structure of the Cinnamon project configs (shortened). -->
+  <HyperText name="video_tutorial_link" value="&lt;a href=&quot;https://example.test/tutorial&quot; target=&quot;_blank&quot;&gt;🎥 Video Tutorial&lt;/a&gt;"/>
+  <HyperText name="guidelines_link" value="&lt;a href='https://example.test/guidelines'&gt;📘 Guidelines&lt;/a&gt;"/>
+  <Header value="Video"/>
+  <Video name="video" value="$video" sync="audio" height="400"/>
+  <Choices name="video_skip_toggle" toName="video" choice="multiple">
+    <Choice value="Skip entire video"/>
+  </Choices>
+  <View visibleWhen="choice-selected" whenTagName="video_skip_toggle" whenChoiceValue="Skip entire video">
+    <Choices name="skip_reason" toName="video" choice="multiple">
+      <Choice value="Has noise"/><Choice value="Intro / Opening"/><Choice value="Other"/>
+    </Choices>
+    <View visibleWhen="choice-selected" whenTagName="skip_reason" whenChoiceValue="Other">
+      <TextArea name="skip_reason_other" toName="video" rows="1" editable="true" maxSubmissions="1"/>
+    </View>
+  </View>
+  <View visibleWhen="choice-unselected" whenTagName="video_skip_toggle" whenChoiceValue="Skip entire video">
+    <Text name="segment_instruction" value="Select one or more speaker segments."/>
+    <Labels name="speaker_segments" toName="audio" choice="multiple">
+      <Label value="Speaker segment"/>
+    </Labels>
+    <Audio name="audio" value="$video" sync="video"/>
+  </View>
+  <View visibleWhen="choice-unselected" whenTagName="video_skip_toggle" whenChoiceValue="Skip entire video">
+    <View visibleWhen="region-selected">
+      <Header name="selected_segment_header" value="Selected segment"/>
+      <Choices name="segment_skip_toggle" toName="audio" perRegion="true" choice="multiple">
+        <Choice value="Skip this segment"/>
+      </Choices>
+      <View visibleWhen="choice-selected" whenTagName="segment_skip_toggle" whenChoiceValue="Skip this segment">
+        <Choices name="segment_skip_reason" toName="audio" perRegion="true" choice="multiple">
+          <Choice value="Has noise"/><Choice value="Other"/>
+        </Choices>
+        <View visibleWhen="choice-selected" whenTagName="segment_skip_reason" whenChoiceValue="Other">
+          <TextArea name="segment_skip_reason_other" toName="audio" perRegion="true" rows="1"/>
+        </View>
+      </View>
+      <View visibleWhen="choice-unselected" whenTagName="segment_skip_toggle" whenChoiceValue="Skip this segment">
+        <Header value="Speaker Gender"/>
+        <Choices name="segment_gender" toName="audio" perRegion="true" choice="single-radio">
+          <Choice value="Male"/><Choice value="Female"/>
+        </Choices>
+        <Header value="Dialect Validation"/>
+        <Choices name="segment_country" toName="audio" perRegion="true" choice="single-radio">
+          <Choice value="Yemen"/><Choice value="Wrong dialect (Skip)"/><Choice value="MSA (Skip)"/>
+        </Choices>
+        <View visibleWhen="choice-selected" whenTagName="segment_country" whenChoiceValue="Yemen">
+          <Header value="Micro-dialect"/>
+          <Choices name="segment_micro_dialect" toName="audio" perRegion="true" choice="single-radio">
+            <Choice value="Adeni"/><Choice value="Tazzi"/><Choice value="White dialect (اللهجة البيضاء)"/>
+          </Choices>
+          <HyperText name="segment_white_dialect_definition" value="&lt;p&gt;White dialect: a neutral variety.&lt;/p&gt;"/>
+          <Header value="Could possibly also be"/>
+          <View visibleWhen="choice-selected" whenTagName="segment_micro_dialect" whenChoiceValue="Adeni">
+            <Choices name="segment_micro_dialect_alt_1" toName="audio" perRegion="true" choice="multiple">
+              <Choice value="Tazzi"/><Choice value="White dialect (اللهجة البيضاء)"/>
+            </Choices>
+          </View>
+          <View visibleWhen="choice-selected" whenTagName="segment_micro_dialect" whenChoiceValue="Tazzi">
+            <Choices name="segment_micro_dialect_alt_5" toName="audio" perRegion="true" choice="multiple">
+              <Choice value="Adeni"/><Choice value="White dialect (اللهجة البيضاء)"/>
+            </Choices>
+          </View>
+          <Header value="Transcription"/>
+          <TextArea name="segment_transcription" toName="audio" perRegion="true" rows="4" editable="true" maxSubmissions="1"
+                    placeholder="اكتب النص هنا" style="direction: rtl; text-align: right; font-size: 16px"/>
+          <Header value="Code switching"/>
+          <Choices name="segment_has_code_switch" toName="audio" perRegion="true" choice="single-radio">
+            <Choice value="Yes"/><Choice value="No"/>
+          </Choices>
+          <View visibleWhen="choice-selected" whenTagName="segment_has_code_switch" whenChoiceValue="Yes">
+            <Choices name="segment_code_switch_language" toName="audio" perRegion="true" choice="single-radio">
+              <Choice value="English"/><Choice value="Other"/>
+            </Choices>
+            <View visibleWhen="choice-selected" whenTagName="segment_code_switch_language" whenChoiceValue="Other">
+              <TextArea name="segment_code_switch_language_other" toName="audio" perRegion="true" rows="1"/>
+            </View>
+            <TextArea name="segment_code_switch_phrase" toName="audio" perRegion="true" rows="2"/>
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+  <View style="display: none">
+    <Choices name="gender" toName="video" choice="single-radio"><Choice value="Male"/></Choices>
+    <TextArea name="transcription" toName="video" rows="1"/>
+  </View>
+</View>

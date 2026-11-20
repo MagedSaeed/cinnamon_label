@@ -12,7 +12,13 @@
     enabled: true, // master switch (popup)
     connections: 3, // parallel range requests per download (HTTP/1.1: 6 per site; keep room for the player and Label Studio's API)
     cacheLimitGB: 2,
+    noDrafts: true, // pause Label Studio's draft auto-save (the server refuses it); we keep a local backup
     devReload: false,
+    prefetchNext: 1, // look-ahead: how many next unannotated tasks' videos to download (0 = off)
+    closeUp: false, // a second, magnified waveform that follows the playhead (off: one whole-video waveform)
+    nudgeMs: 50, // the -/+ buttons beside a segment's start and end
+    nudgeShiftMs: 250, // the same buttons with Shift held
+    splitGapMs: 100, // gap left between the two parts of a split, centred on the playhead
   };
   CL.settings = () => new Promise((r) => chrome.storage.sync.get(CL.DEFAULTS, r));
   CL.alive = () => {
@@ -27,14 +33,28 @@
   const MODE_KEY = "cinnamonLabel.mode";
   CL.getMode = () => {
     try {
-      return localStorage.getItem(MODE_KEY) === "native" ? "native" : "cinnamon";
+      // Label Studio's own UI until the user picks Cinnamon Label; then their last choice sticks.
+      return localStorage.getItem(MODE_KEY) === "cinnamon" ? "cinnamon" : "native";
     } catch (_) {
       return "native";
+    }
+  };
+  // Has the user ever chosen a UI here? Until then the "Use Cinnamon Label" button invites attention.
+  CL.hasChosenMode = () => {
+    try {
+      return !!localStorage.getItem(MODE_KEY);
+    } catch (_) {
+      return true;
     }
   };
   CL.setMode = (m) => {
     try {
       localStorage.setItem(MODE_KEY, m);
+    } catch (_) {}
+  };
+  CL.setNoDrafts = (on) => {
+    try {
+      localStorage.setItem("cinnamonLabel.noDrafts", on ? "1" : "0");
     } catch (_) {}
   };
   // Tells page.js whether to hold Label Studio's waveform request for us (see bridge.js).
@@ -95,6 +115,53 @@
       }
     };
   CL.on = (el, type, fn, opts) => el.addEventListener(type, CL.guard(fn), opts);
+
+  // ---------- shared download budget (see background.js) ----------
+  // Resolves with a release() function once a connection slot is free for this download.
+  // priority: 0 visible task, 1 background-tab task, 2 prefetch.
+  CL.acquireSlot = (priority) =>
+    new Promise((resolve) => {
+      const noop = () => {};
+      const ask = () => {
+        if (!CL.alive()) return resolve(noop);
+        try {
+          chrome.runtime.sendMessage({ type: "CL_SLOT_ACQUIRE", priority: typeof priority === "function" ? priority() : priority }, (r) => {
+            if (chrome.runtime.lastError || !r || !r.ok) return setTimeout(ask, 1000); // worker restarted: ask again
+            let done = false;
+            resolve(() => {
+              if (done || !CL.alive()) return;
+              done = true;
+              chrome.runtime.sendMessage({ type: "CL_SLOT_RELEASE", lease: r.lease }, () => void chrome.runtime.lastError);
+            });
+          });
+        } catch (_) {
+          resolve(noop);
+        }
+      };
+      ask();
+    });
+  try {
+    chrome.runtime.sendMessage({ type: "CL_SLOT_RESET" }, () => void chrome.runtime.lastError);
+  } catch (_) {}
+
+  // ---------- keys typed in our own fields ----------
+  // Key events from our text fields are stopped at the window (before Label Studio's hotkeys can see
+  // them: otherwise Backspace could delete the selected segment and Ctrl+Enter could submit).
+  // Stopping them there also skips listeners on the field itself, so fields register here instead.
+  CL.fieldKeys = new WeakMap(); // element -> keydown handler
+  CL.onFieldKey = (el, fn) => CL.fieldKeys.set(el, CL.guard(fn));
+  // Moving a whole segment needs a held key, so a click never shifts one by accident.
+  // Ctrl (⌘ on a Mac; Alt is taken by Linux window managers for dragging windows).
+  const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  CL.MOVE_KEY = MAC ? "⌘" : "Ctrl";
+  CL.moveKey = (e) => !!(e && (MAC ? e.metaKey : e.ctrlKey));
+  CL.isTypingTarget = (t) => {
+    if (!t || !t.tagName) return false;
+    if (t.isContentEditable) return true;
+    if (t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
+    if (t.tagName === "INPUT") return !["range", "button", "checkbox", "radio", "submit", "reset"].includes((t.type || "").toLowerCase());
+    return false;
+  };
 
   CL.U = U;
 })();

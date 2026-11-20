@@ -2,11 +2,22 @@
 // Saved videos live in the Label Studio site's storage, which the popup can't reach, so deletions
 // are queued in chrome.storage.local ("clCacheDeletes") and applied by a Label Studio tab.
 const U = globalThis.CLU;
-const DEFAULTS = { enabled: true, connections: 3, cacheLimitGB: 2, devReload: false };
+const DEFAULTS = {
+  enabled: true,
+  connections: 3,
+  cacheLimitGB: 2,
+  noDrafts: true,
+  devReload: false,
+  prefetchNext: 1,
+  closeUp: false,
+  nudgeMs: 50,
+  nudgeShiftMs: 250,
+  splitGapMs: 100,
+};
 const el = (id) => document.getElementById(id);
 
 // ---------- tabs ----------
-const TABS = ["general", "saved", "preseg"];
+const TABS = ["general", "saved"];
 function selectTab(name) {
   if (!TABS.includes(name)) name = "general";
   for (const t of TABS) {
@@ -31,9 +42,15 @@ selectTab(localStorage.getItem("clPopupTab") || "general");
 function write(s) {
   el("enabled").checked = !!s.enabled;
   el("devReload").checked = !!s.devReload;
+  el("noDrafts").checked = !!s.noDrafts;
+  el("closeUp").checked = !!s.closeUp;
+  (document.querySelector(`input[name=prefetchNext][value="${s.prefetchNext}"]`) || document.querySelector('input[name=prefetchNext][value="1"]')).checked = true;
   const r = document.querySelector(`input[name=connections][value="${s.connections}"]`) || document.querySelector('input[name=connections][value="3"]');
   r.checked = true;
   el("cacheLimitGB").value = String(s.cacheLimitGB);
+  if (document.activeElement !== el("nudgeMs")) el("nudgeMs").value = String(s.nudgeMs);
+  if (document.activeElement !== el("nudgeShiftMs")) el("nudgeShiftMs").value = String(s.nudgeShiftMs);
+  if (document.activeElement !== el("splitGapMs")) el("splitGapMs").value = String(s.splitGapMs);
   el("status").dataset.state = s.enabled ? "ok" : "off";
   el("statusText").textContent = s.enabled ? "Active" : "Off";
 }
@@ -41,8 +58,14 @@ function read() {
   return {
     enabled: el("enabled").checked,
     devReload: el("devReload").checked,
+    noDrafts: el("noDrafts").checked,
+    closeUp: el("closeUp").checked,
+    prefetchNext: Number(document.querySelector("input[name=prefetchNext]:checked")?.value ?? DEFAULTS.prefetchNext),
     connections: Number(document.querySelector("input[name=connections]:checked")?.value) || DEFAULTS.connections,
     cacheLimitGB: Number(el("cacheLimitGB").value) || DEFAULTS.cacheLimitGB,
+    nudgeMs: Math.max(1, Math.min(2000, Math.round(Number(el("nudgeMs").value)))) || DEFAULTS.nudgeMs,
+    nudgeShiftMs: Math.max(1, Math.min(5000, Math.round(Number(el("nudgeShiftMs").value)))) || DEFAULTS.nudgeShiftMs,
+    splitGapMs: Number.isFinite(Number(el("splitGapMs").value)) && el("splitGapMs").value !== "" ? Math.max(0, Math.min(2000, Math.round(Number(el("splitGapMs").value)))) : DEFAULTS.splitGapMs,
   };
 }
 let flashTimer;
@@ -104,6 +127,31 @@ el("deleteAll").addEventListener("click", () => {
   queueDelete(["*"]);
 });
 
+// Is the saved video's task already submitted? Asked from Label Studio (read-only), once per popup.
+const taskStatus = new Map(); // "base|id" -> Promise<{ status: "submitted" | "skipped" | "open", url } | null>
+function statusOf(key, taskId) {
+  const base = key.split("/data/local-files")[0]; // e.g. https://annotation.dlnlp.ai/cinnamon
+  const k = `${base}|${taskId}`;
+  if (!taskStatus.has(k)) {
+    taskStatus.set(
+      k,
+      fetch(`${base}/api/tasks/${taskId}`, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((t) =>
+          !t
+            ? null
+            : {
+                status: t.total_annotations > 0 ? "submitted" : t.cancelled_annotations > 0 ? "skipped" : "open",
+                url: t.project != null ? `${base}/projects/${t.project}/data?task=${taskId}` : null,
+              }
+        )
+        .catch(() => null)
+    );
+  }
+  return taskStatus.get(k);
+}
+const STATUS_TEXT = { submitted: "Submitted", skipped: "Skipped", open: "Not submitted" };
+
 async function renderSaved() {
   const { cacheLimitGB } = await chrome.storage.sync.get(DEFAULTS);
   const { clCacheIndex: idx = {} } = await chrome.storage.local.get({ clCacheIndex: {} });
@@ -121,6 +169,28 @@ async function renderSaved() {
     const name = document.createElement("p");
     name.className = "name";
     name.textContent = v.taskId != null ? `Task ${v.taskId}` : "Video";
+    if (v.taskId != null) {
+      const badge = document.createElement("span");
+      badge.className = "status";
+      name.append(" ", badge);
+      statusOf(key, v.taskId).then((info) => {
+        if (!info) return;
+        badge.textContent = STATUS_TEXT[info.status];
+        badge.dataset.s = info.status;
+        if (!info.url) return;
+        // The task name opens the task in a new tab.
+        const a = document.createElement("a");
+        a.className = "task";
+        a.href = info.url;
+        a.textContent = `Task ${v.taskId}`;
+        a.title = "Open this task in a new tab";
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: info.url });
+        });
+        name.firstChild.replaceWith(a);
+      });
+    }
     const file = document.createElement("span");
     file.className = "file";
     file.textContent = `${v.name || key}, opened ${ago(v.used)}`;
@@ -132,7 +202,7 @@ async function renderSaved() {
     del.className = "link danger del";
     del.type = "button";
     del.textContent = "Delete";
-    del.setAttribute("aria-label", `Delete the saved video of ${name.textContent}`);
+    del.setAttribute("aria-label", `Delete the saved video of task ${v.taskId ?? ""}`);
     del.addEventListener("click", () => queueDelete([key]));
     li.append(name, size, file, del);
     list.appendChild(li);

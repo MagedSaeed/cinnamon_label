@@ -37,7 +37,6 @@
     <nav class="tabs" role="tablist">
       <button role="tab" id="tab-general" aria-controls="p-general" aria-selected="true">General</button>
       <button role="tab" id="tab-saved" aria-controls="p-saved" aria-selected="false">Saved videos</button>
-      <button role="tab" id="tab-preseg" aria-controls="p-preseg" aria-selected="false">Presegmentation</button>
     </nav>
   </header>
 
@@ -49,6 +48,10 @@
           <label class="switch" for="enabled">
             <span><b>Use Cinnamon Label<button type="button" class="tip" aria-label="About Use Cinnamon Label" data-tip="Shows the Cinnamon Label editor on Label Studio task pages. Turn it off to get Label Studio exactly as it was; reload the task page afterwards. You can also switch per task with the “Switch to native UI” button.">i</button></b><small>On Label Studio task pages</small></span>
             <input type="checkbox" id="enabled"><i></i>
+          </label>
+          <label class="switch" for="noDrafts">
+            <span><b>Stop draft auto-save<button type="button" class="tip" aria-label="About Stop draft auto-save" data-tip="The server refuses Label Studio's automatic draft saves, which shows “Runtime error: Forbidden”. With this on, Label Studio stops trying, and Cinnamon Label keeps a backup of each task's unsubmitted work in this browser instead, offering to restore it if the page reloads. Takes effect on the next page load.">i</button></b><small>Keep a local backup instead</small></span>
+            <input type="checkbox" id="noDrafts"><i></i>
           </label>
         </section>
         <section>
@@ -62,9 +65,27 @@
               <label><input type="radio" name="connections" value="4"><span>4</span></label>
             </div>
           </div>
+          <div class="field">
+            <span class="name" id="aheadLabel">Download ahead<button type="button" class="tip" aria-label="About Download ahead" data-tip="While you work on a task, the videos of the next tasks in your list that have no annotation yet are downloaded and saved in the background, after the current video is complete and at the lowest priority. They then open instantly, without buffering.">i</button></span>
+            <div class="segmented three" role="radiogroup" aria-labelledby="aheadLabel">
+              <label><input type="radio" name="prefetchNext" value="0"><span>Off</span></label>
+              <label><input type="radio" name="prefetchNext" value="1"><span>Next task<small>Default</small></span></label>
+              <label><input type="radio" name="prefetchNext" value="2"><span>Next 2</span></label>
+            </div>
+          </div>
         </section>
       </div>
       <div class="col">
+        <section>
+          <h2>Editing</h2>
+          <label class="switch" for="closeUp">
+            <span><b>Close-up waveform<button type="button" class="tip" aria-label="About Close-up waveform" data-tip="Adds a second, magnified waveform under the whole-video one. It follows the playhead and shows about 15 seconds at a time, so the pauses between words are visible and segment edges can be placed precisely by dragging. Off: one waveform of the whole video; use the − / + buttons or type a time for fine adjustments.">i</button></b><small>A magnified lane that follows the playhead</small></span>
+            <input type="checkbox" id="closeUp"><i></i>
+          </label>
+          <label class="num inline" for="nudgeMs"><span>Nudge step<button type="button" class="tip" aria-label="About Nudge step" data-tip="How far one click on the small − / + buttons beside a segment's start and end moves it.">i</button></span><span class="unit"><input type="number" min="1" max="2000" step="5" id="nudgeMs"><em>ms</em></span></label>
+          <label class="num inline" for="nudgeShiftMs"><span>Shift-click step<button type="button" class="tip" aria-label="About Shift-click step" data-tip="How far the same − / + buttons move the edge when you hold Shift while clicking: for bigger corrections.">i</button></span><span class="unit"><input type="number" min="1" max="5000" step="10" id="nudgeShiftMs"><em>ms</em></span></label>
+          <label class="num inline" for="splitGapMs"><span>Split gap<button type="button" class="tip" aria-label="About Split gap" data-tip="Split at playhead leaves this much space between the two parts, centred on the playhead, so they are clearly separate. 0: the parts touch.">i</button></span><span class="unit"><input type="number" min="0" max="2000" step="10" id="splitGapMs"><em>ms</em></span></label>
+        </section>
         <section>
           <h2>Development</h2>
           <label class="switch" for="devReload">
@@ -92,11 +113,6 @@
       <ul id="list" class="list"></ul>
       <p id="empty" class="empty">No saved videos yet. Opening a task saves its video here.</p>
       <p id="queued" class="info" hidden>Deletions are applied by the Label Studio tab: now if one is open, otherwise the next time you open one.</p>
-    </div>
-
-    <!-- Presegmentation -->
-    <div role="tabpanel" id="p-preseg" aria-labelledby="tab-preseg" class="panel" hidden>
-      <p class="empty">Presegmentation settings will be here: server address, provider and segment rules. Suggested segments are only added to the annotation when you accept them.</p>
     </div>
   </main>
 
