@@ -4,6 +4,7 @@
   "short_name": "Cinnamon Label",
   "version": "0.1.0",
   "description": "Cinnamon Label: smooth playback, waveform segment editing and a roomy transcript box for Label Studio. Never submits.",
+  "minimum_chrome_version": "111",
   "permissions": [
     "storage",
     "unlimitedStorage"

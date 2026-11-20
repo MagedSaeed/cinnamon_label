@@ -1,4 +1,4 @@
-// Run with: node --test tests/*.test.js
+// Run with: npm test   (or: node --test) on any OS.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const S = require("../extension/src/shared/segments.js");

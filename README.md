@@ -6,10 +6,10 @@ It only changes the page's interface. It edits the annotation inside Label Studi
 
 ## Install (load unpacked)
 
-1. Download this repository (`git clone`, or **Code → Download ZIP** and unzip it).
-2. Open `chrome://extensions` (also works in Edge and Brave).
+1. Download this repository (`git clone`, or **Code → Download ZIP** and unzip it; on Windows, right-click the ZIP → **Extract All…**, since Chrome can't load from inside a ZIP).
+2. Open `chrome://extensions` (also works in Edge and Brave). Chrome 111 or newer is needed.
 3. Turn on **Developer mode** (top right).
-4. Click **Load unpacked** and choose the `extension` folder inside the repository.
+4. Click **Load unpacked** and choose the `extension` folder inside the repository (the one holding `manifest.json`; a Windows unzip may add an extra `cinnamon_label-main` folder level). "Manifest file is missing" means the wrong folder was picked.
 5. Pin the Cinnamon Label icon so its settings are one click away.
 6. Open (or reload) a task in Label Studio.
 
@@ -62,6 +62,6 @@ Keys typed into text boxes stay in the text box. Ctrl / Cmd shortcuts are left t
 ## Development
 
 - Plain JavaScript, Manifest V3, no build step. Content scripts are in `extension/src/content`, the page bridge (which talks to Label Studio's annotation state) in `extension/src/page/bridge.js`, pure logic in `extension/src/shared`.
-- Tests: `node --test tests/*.test.js`
-- Auto-reload: turn on **Reload on code changes** in the popup, then after editing run `date +%s%N > extension/build-id.txt`. The extension reloads and refreshes Label Studio tabs (never while edits are still being written).
-- Icons: `python3 tools/make_icons.py extension/icons` (needs Pillow) draws the PNG icons to match `extension/icons/logo.svg`.
+- Tests: `npm test` (Node 18 or newer; same command on Windows, macOS and Linux).
+- Auto-reload: turn on **Reload on code changes** in the popup, then after editing run `npm run bump` (or `node tools/bump_build.js`). The extension reloads and refreshes Label Studio tabs (never while edits are still being written).
+- Icons: `python3 tools/make_icons.py extension/icons` (on Windows: `py tools/make_icons.py extension/icons`) (needs Pillow) draws the PNG icons to match `extension/icons/logo.svg`.

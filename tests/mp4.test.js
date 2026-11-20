@@ -1,4 +1,4 @@
-// Run with: node --test tests/*.test.js
+// Run with: npm test   (or: node --test) on any OS.
 // Expected values come from ffprobe on the same fixtures.
 const test = require("node:test");
 const assert = require("node:assert/strict");
