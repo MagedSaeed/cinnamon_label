@@ -1,4 +1,4 @@
-// Run with: node --test tests/
+// Run with: npm test   (or: node --test)  — works the same on Windows, macOS and Linux.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const U = require("../extension/src/shared/util.js");

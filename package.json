@@ -1,0 +1,8 @@
+{
+  "name": "cinnamon-label",
+  "private": true,
+  "description": "Development scripts only. The extension itself needs no build step and no npm install.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
